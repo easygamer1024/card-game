@@ -1,4 +1,3 @@
-// 在 connectWebSocket 函数中修改：
 function connectWebSocket() {
     // 自动检测服务器地址
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -14,7 +13,29 @@ function connectWebSocket() {
             reconnectAttempts = 0;
         };
         
-        // 其余代码保持不变...
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            handleServerMessage(data);
+        };
+        
+        ws.onclose = function() {
+            console.log('与服务器的连接已断开');
+            updateConnectionStatus(false);
+            
+            // 尝试重新连接
+            if (reconnectAttempts < maxReconnectAttempts) {
+                setTimeout(() => {
+                    reconnectAttempts++;
+                    console.log(`尝试重新连接 (${reconnectAttempts}/${maxReconnectAttempts})`);
+                    connectWebSocket();
+                }, 2000);
+            }
+        };
+        
+        ws.onerror = function(error) {
+            console.error('WebSocket错误:', error);
+            updateConnectionStatus(false);
+        };
     } catch (error) {
         console.error('连接失败:', error);
         showMessage("无法连接到服务器，请检查网络连接");
