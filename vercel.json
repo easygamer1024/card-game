@@ -23,10 +23,5 @@
       "src": "/api/game",
       "dest": "/api/game.js"
     }
-  ],
-  "functions": {
-    "api/game.js": {
-      "maxDuration": 60
-    }
-  }
+  ]
 }
