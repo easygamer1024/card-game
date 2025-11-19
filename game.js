@@ -115,12 +115,21 @@ function broadcastToRoom(roomId, message) {
     }
 }
 
-// 在 Vercel 中我们需要创建一个 HTTP 服务器
+// 在 Railway 中我们需要创建一个 HTTP 服务器
 const server = http.createServer((req, res) => {
-    // 设置 CORS 头
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    // 设置 CORS 头 - 加强配置
+    const allowedOrigins = process.env.NODE_ENV === 'production' 
+        ? ['https://your-app-name.railway.app'] 
+        : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+    
+    const origin = req.headers.origin;
+    if (allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
     
     if (req.method === 'OPTIONS') {
         res.writeHead(200);
@@ -151,6 +160,18 @@ const server = http.createServer((req, res) => {
         return;
     }
     
+    // API 根端点
+    if (req.url === '/api' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+            message: '干瞪眼儿游戏服务器',
+            version: '1.0.0',
+            websocket: '支持 WebSocket 连接',
+            endpoints: ['/health', '/rooms', '/api']
+        }));
+        return;
+    }
+    
     // 默认响应
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ 
@@ -162,7 +183,7 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocket.Server({ 
     server,
-    // 在 Vercel 上需要处理 WebSocket 升级
+    // 在 Railway 上需要处理 WebSocket 升级
     handleProtocols: (protocols, request) => {
         return 'chat';
     }
@@ -171,6 +192,18 @@ const wss = new WebSocket.Server({
 // WebSocket连接处理
 wss.on('connection', (ws, request) => {
     console.log('新的客户端连接');
+    
+    // 加强 CORS 检查
+    const origin = request.headers.origin;
+    const allowedOrigins = process.env.NODE_ENV === 'production' 
+        ? ['https://your-app-name.railway.app'] 
+        : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+    
+    if (!allowedOrigins.includes(origin)) {
+        console.log('拒绝来自不允许的来源的连接:', origin);
+        ws.close();
+        return;
+    }
     
     let currentPlayer = null;
     let currentRoom = null;
@@ -191,6 +224,10 @@ wss.on('connection', (ws, request) => {
             // 玩家离开房间
             handlePlayerLeave(currentRoom, currentPlayer);
         }
+    });
+    
+    ws.on('error', (error) => {
+        console.error('WebSocket 错误:', error);
     });
     
     // 处理客户端消息
@@ -217,6 +254,8 @@ wss.on('connection', (ws, request) => {
             case 'play_again':
                 handlePlayAgain(ws, message);
                 break;
+            default:
+                ws.send(JSON.stringify({ type: 'error', message: '未知的消息类型' }));
         }
     }
     
@@ -227,7 +266,7 @@ wss.on('connection', (ws, request) => {
         
         const player = {
             id: playerId,
-            name: message.playerName,
+            name: message.playerName || '玩家' + playerId.slice(0, 4),
             socket: ws,
             hand: [],
             cards: 0
@@ -279,7 +318,7 @@ wss.on('connection', (ws, request) => {
         const playerId = uuidv4();
         const player = {
             id: playerId,
-            name: message.playerName,
+            name: message.playerName || '玩家' + playerId.slice(0, 4),
             socket: ws,
             hand: [],
             cards: 0
@@ -337,6 +376,14 @@ wss.on('connection', (ws, request) => {
             if (room.players.length === 0) {
                 rooms.delete(room.id);
                 console.log(`房间 ${room.id} 已删除`);
+            } else if (room.gameStarted) {
+                // 如果游戏进行中且有玩家离开，结束游戏
+                broadcastToRoom(room.id, {
+                    type: 'game_ended',
+                    reason: '玩家离开游戏',
+                    winnerId: null
+                });
+                room.gameStarted = false;
             }
         }
     }
@@ -358,7 +405,7 @@ wss.on('connection', (ws, request) => {
             type: 'game_started',
             dealer: currentRoom.dealer,
             currentPlayer: currentRoom.currentPlayer,
-            playerHand: currentPlayer.id === currentPlayer.id ? currentPlayer.hand : []
+            playerHand: currentPlayer.hand
         });
         
         console.log(`房间 ${currentRoom.id} 游戏开始`);
@@ -478,21 +525,12 @@ wss.on('connection', (ws, request) => {
     }
 });
 
-// 导出服务器处理函数（Vercel 需要）
-module.exports = (req, res) => {
-    // 处理 WebSocket 升级请求
-    if (req.headers.upgrade === 'websocket') {
-        server.emit('request', req, res);
-    } else {
-        // 处理普通 HTTP 请求
-        server.emit('request', req, res);
-    }
-};
+// 启动服务器
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`纸牌游戏服务器运行在端口 ${PORT}`);
+    console.log(`环境: ${process.env.NODE_ENV || 'development'}`);
+});
 
-// 启动服务器（本地开发时使用）
-if (require.main === module) {
-    const PORT = process.env.PORT || 3000;
-    server.listen(PORT, () => {
-        console.log(`纸牌游戏服务器运行在端口 ${PORT}`);
-    });
-}
+// 导出服务器实例（Railway 需要）
+module.exports = server;

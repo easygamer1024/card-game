@@ -1,17 +1,20 @@
 {
   "name": "card-game",
   "version": "1.0.0",
-  "description": "干瞪眼儿纸牌游戏",
-  "main": "api/game.js",
+  "description": "干瞪眼儿",
+  "main": "game.js",
   "scripts": {
-    "dev": "node api/game.js",
-    "start": "node api/game.js"
+    "start": "node game.js",
+    "dev": "node game.js"
   },
   "dependencies": {
-    "ws": "^8.14.0",
+    "ws": "^8.14.2",
     "uuid": "^9.0.0"
   },
   "engines": {
-    "node": ">=18.x"
-  }
+    "node": ">=16.0.0"
+  },
+  "keywords": ["game", "cards", "websocket"],
+  "author": "Your Name",
+  "license": "MIT"
 }

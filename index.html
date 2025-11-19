@@ -1,0 +1,70 @@
+function connectWebSocket() {
+    // 自动检测服务器地址 - 适配 Railway 部署
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    
+    // 尝试不同的 WebSocket 路径
+    const serverUrls = [
+        `${protocol}//${host}/api/game`,
+        `${protocol}//${host}/game`,
+        `${protocol}//${host}`
+    ];
+    
+    let currentUrlIndex = 0;
+    
+    function tryConnect() {
+        if (currentUrlIndex >= serverUrls.length) {
+            console.error('所有连接尝试都失败了');
+            showMessage("无法连接到游戏服务器，请刷新页面重试");
+            return;
+        }
+        
+        const serverUrl = serverUrls[currentUrlIndex];
+        console.log(`尝试连接到: ${serverUrl}`);
+        
+        try {
+            ws = new WebSocket(serverUrl);
+            
+            ws.onopen = function() {
+                console.log('已连接到服务器:', serverUrl);
+                updateConnectionStatus(true);
+                reconnectAttempts = 0;
+            };
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                handleServerMessage(data);
+            };
+            
+            ws.onclose = function() {
+                console.log('与服务器的连接已断开');
+                updateConnectionStatus(false);
+                
+                // 尝试重新连接
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    setTimeout(() => {
+                        reconnectAttempts++;
+                        console.log(`尝试重新连接 (${reconnectAttempts}/${maxReconnectAttempts})`);
+                        tryConnect();
+                    }, 2000);
+                } else {
+                    // 尝试下一个URL
+                    currentUrlIndex++;
+                    reconnectAttempts = 0;
+                    setTimeout(tryConnect, 1000);
+                }
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket错误:', error);
+                updateConnectionStatus(false);
+            };
+        } catch (error) {
+            console.error('连接失败:', error);
+            currentUrlIndex++;
+            setTimeout(tryConnect, 1000);
+        }
+    }
+    
+    tryConnect();
+}
