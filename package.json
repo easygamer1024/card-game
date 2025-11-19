@@ -1,20 +1,16 @@
 {
   "name": "card-game",
   "version": "1.0.0",
-  "description": "干瞪眼儿",
-  "main": "game.js",
+  "description": "干瞪眼儿纸牌游戏 - Vercel 部署版",
+  "main": "api/game.js",
   "scripts": {
-    "start": "node game.js",
-    "dev": "node game.js"
+    "dev": "node api/game.js"
   },
   "dependencies": {
     "ws": "^8.14.2",
     "uuid": "^9.0.0"
   },
   "engines": {
-    "node": ">=16.0.0"
-  },
-  "keywords": ["game", "cards", "websocket"],
-  "author": "Your Name",
-  "license": "MIT"
+    "node": ">=18.0.0"
+  }
 }
