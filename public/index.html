@@ -988,7 +988,7 @@ function addReconnectButton() {
 async function testConnection() {
     try {
         showMessage('测试服务器连接...');
-        const response = await fetch('/health');
+        const response = await fetch('/api/health');
         if (response.ok) {
             const data = await response.json();
             console.log('服务器健康状态:', data);
@@ -1012,35 +1012,6 @@ async function testConnection() {
 if (path === '/api/game-state' && method === 'GET') {
     const urlParams = new URLSearchParams(url.split('?')[1]);
     const roomId = urlParams.get('roomId');
-    
-    if (roomId) {
-        const room = rooms.get(roomId.toUpperCase());
-        if (room) {
-            res.json({
-                exists: true,
-                roomId: room.id,
-                gameStarted: room.gameStarted,
-                players: room.players.map(p => ({
-                    id: p.id,
-                    name: p.name,
-                    cards: p.cards,
-                    handCount: p.hand ? p.hand.length : 0,
-                    isDealer: p.id === room.dealer,
-                    isCurrent: p.id === room.currentPlayer
-                })),
-                dealer: room.dealer,
-                currentPlayer: room.currentPlayer,
-                drawPileCount: room.drawPile ? room.drawPile.length : 0,
-                discardPileCount: room.discardPile ? room.discardPile.length : 0
-            });
-        } else {
-            res.json({ 
-                exists: false,
-                availableRooms: Array.from(rooms.keys())
-            });
-        }
-    } else {
-        res.json({ error: '需要提供roomId参数' });
     }
     return;
 }
