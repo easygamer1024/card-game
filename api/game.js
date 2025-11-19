@@ -1,8 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 
-// 游戏房间
+// 内存存储（在生产环境中应考虑使用 Redis 等持久化方案）
 const rooms = new Map();
-// 客户端连接信息
 const clients = new Map();
 
 // 创建一副牌
@@ -96,47 +95,22 @@ function isBomb(cards) {
     return false;
 }
 
-// 清理过期客户端
-function cleanupClients() {
+// 清理过期数据
+function cleanupExpiredData() {
     const now = Date.now();
+    
+    // 清理过期的客户端
     for (let [clientId, client] of clients.entries()) {
-        if (now - client.lastSeen > 30000) { // 30秒无活动视为离线
-            if (client.roomId && client.playerId) {
-                const room = rooms.get(client.roomId);
-                if (room) {
-                    const playerIndex = room.players.findIndex(p => p.id === client.playerId);
-                    if (playerIndex !== -1) {
-                        room.players.splice(playerIndex, 1);
-                        broadcastToRoom(room.id, {
-                            type: 'player_left',
-                            playerId: client.playerId,
-                            playerName: room.players[playerIndex]?.name || '未知玩家',
-                            players: room.players.map(p => ({ id: p.id, name: p.name, cards: p.cards }))
-                        });
-                        
-                        if (room.players.length === 0) {
-                            rooms.delete(room.id);
-                        }
-                    }
-                }
-            }
+        if (now - client.lastSeen > 60000) { // 60秒无活动
             clients.delete(clientId);
         }
     }
-}
-
-// 广播消息给房间内所有玩家
-function broadcastToRoom(roomId, message) {
-    const room = rooms.get(roomId);
-    if (room) {
-        room.players.forEach(player => {
-            // 为每个玩家存储消息
-            player.pendingMessages = player.pendingMessages || [];
-            player.pendingMessages.push({
-                ...message,
-                timestamp: Date.now()
-            });
-        });
+    
+    // 清理空房间
+    for (let [roomId, room] of rooms.entries()) {
+        if (room.players.length === 0) {
+            rooms.delete(roomId);
+        }
     }
 }
 
@@ -155,67 +129,76 @@ module.exports = async (req, res) => {
     const { method, url } = req;
     const path = url.split('?')[0];
     
-    // 解析请求体
-    let body = {};
-    if (method === 'POST') {
-        try {
-            body = await new Promise((resolve, reject) => {
-                let data = '';
-                req.on('data', chunk => data += chunk);
-                req.on('end', () => {
-                    try {
-                        resolve(data ? JSON.parse(data) : {});
-                    } catch (e) {
-                        reject(e);
-                    }
-                });
+    try {
+        // 健康检查端点
+        if (path === '/health' && method === 'GET') {
+            res.json({ 
+                status: 'ok', 
+                rooms: rooms.size,
+                clients: clients.size,
+                timestamp: new Date().toISOString()
             });
-        } catch (error) {
-            res.status(400).json({ error: '无效的JSON数据' });
             return;
         }
-    }
-    
-    // 健康检查端点
-    if (path === '/health' && method === 'GET') {
-        res.json({ 
-            status: 'ok', 
-            rooms: rooms.size,
-            clients: clients.size,
-            timestamp: new Date().toISOString()
-        });
-        return;
-    }
-    
-    // 房间信息端点
-    if (path === '/rooms' && method === 'GET') {
-        const roomInfo = Array.from(rooms.entries()).map(([id, room]) => ({
-            id: id,
-            playerCount: room.players.length,
-            gameStarted: room.gameStarted
-        }));
-        res.json(roomInfo);
-        return;
-    }
-    
-    // 游戏API端点
-    if (path === '/api/game' && method === 'POST') {
-        const { action, clientId, roomId, playerId, ...data } = body;
         
-        // 验证客户端
-        if (clientId && !clients.has(clientId)) {
-            clients.set(clientId, {
-                id: clientId,
-                lastSeen: Date.now(),
-                pendingMessages: []
-            });
+        // 房间信息端点
+        if (path === '/rooms' && method === 'GET') {
+            const roomInfo = Array.from(rooms.entries()).map(([id, room]) => ({
+                id: id,
+                playerCount: room.players.length,
+                gameStarted: room.gameStarted,
+                players: room.players.map(p => p.name)
+            }));
+            res.json(roomInfo);
+            return;
         }
         
-        if (clientId) {
-            clients.get(clientId).lastSeen = Date.now();
-        }
-        
-        try {
+        // 游戏API端点
+        if (path === '/api/game') {
+            let body = {};
+            
+            if (method === 'POST') {
+                // 解析请求体
+                body = await new Promise((resolve, reject) => {
+                    let data = '';
+                    req.on('data', chunk => data += chunk);
+                    req.on('end', () => {
+                        try {
+                            resolve(data ? JSON.parse(data) : {});
+                        } catch (e) {
+                            reject(new Error('无效的JSON数据'));
+                        }
+                    });
+                });
+            } else if (method === 'GET') {
+                // 处理 GET 请求（用于轮询）
+                const urlParams = new URLSearchParams(url.split('?')[1]);
+                body = {
+                    action: 'get_updates',
+                    clientId: urlParams.get('clientId'),
+                    roomId: urlParams.get('roomId'),
+                    playerId: urlParams.get('playerId')
+                };
+            } else {
+                res.status(405).json({ error: '方法不允许' });
+                return;
+            }
+            
+            const { action, clientId, roomId, playerId, ...data } = body;
+            
+            // 验证客户端
+            if (clientId) {
+                if (!clients.has(clientId)) {
+                    clients.set(clientId, {
+                        id: clientId,
+                        lastSeen: Date.now(),
+                        pendingMessages: []
+                    });
+                } else {
+                    clients.get(clientId).lastSeen = Date.now();
+                }
+            }
+            
             let result;
             
             switch (action) {
@@ -241,26 +224,31 @@ module.exports = async (req, res) => {
                     result = handleGetUpdates(roomId, playerId, clientId);
                     break;
                 default:
-                    res.status(400).json({ error: '未知的操作' });
+                    res.status(400).json({ error: '未知的操作', action: action });
                     return;
             }
             
+            // 清理过期数据
+            cleanupExpiredData();
+            
             res.json(result);
-        } catch (error) {
-            console.error('处理请求错误:', error);
-            res.status(500).json({ error: '服务器内部错误' });
+            return;
         }
         
-        // 清理过期客户端
-        cleanupClients();
-        return;
+        // 默认响应
+        res.json({ 
+            message: '干瞪眼儿游戏服务器 API',
+            endpoints: ['/health', '/rooms', '/api/game'],
+            timestamp: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        console.error('服务器错误:', error);
+        res.status(500).json({ 
+            error: '服务器内部错误',
+            message: error.message 
+        });
     }
-    
-    // 默认响应
-    res.json({ 
-        message: '干瞪眼儿游戏服务器 API',
-        endpoints: ['/health', '/rooms', '/api/game']
-    });
 };
 
 // 创建房间
@@ -285,7 +273,8 @@ function handleCreateRoom(playerName, clientId) {
         drawPile: [],
         discardPile: [],
         currentPlay: null,
-        lastPlay: null
+        lastPlay: null,
+        createdAt: Date.now()
     };
     
     rooms.set(roomId, room);
@@ -299,6 +288,7 @@ function handleCreateRoom(playerName, clientId) {
     }
     
     return {
+        success: true,
         type: 'room_created',
         roomId: roomId,
         playerId: playerId
@@ -309,15 +299,15 @@ function handleCreateRoom(playerName, clientId) {
 function handleJoinRoom(roomId, playerName, clientId) {
     const room = rooms.get(roomId);
     if (!room) {
-        throw new Error('房间不存在');
+        return { success: false, error: '房间不存在' };
     }
     
     if (room.players.length >= 6) {
-        throw new Error('房间已满');
+        return { success: false, error: '房间已满' };
     }
     
     if (room.gameStarted) {
-        throw new Error('游戏已开始，无法加入');
+        return { success: false, error: '游戏已开始，无法加入' };
     }
     
     const playerId = uuidv4();
@@ -340,18 +330,31 @@ function handleJoinRoom(roomId, playerName, clientId) {
     }
     
     // 通知其他玩家
-    broadcastToRoom(roomId, {
-        type: 'player_joined',
-        playerId: playerId,
-        playerName: player.name,
-        players: room.players.map(p => ({ id: p.id, name: p.name, cards: p.cards }))
+    room.players.forEach(p => {
+        if (p.id !== playerId) {
+            p.pendingMessages.push({
+                type: 'player_joined',
+                playerId: playerId,
+                playerName: player.name,
+                players: room.players.map(pl => ({ 
+                    id: pl.id, 
+                    name: pl.name, 
+                    cards: pl.cards 
+                }))
+            });
+        }
     });
     
     return {
+        success: true,
         type: 'room_joined',
         roomId: roomId,
         playerId: playerId,
-        players: room.players.map(p => ({ id: p.id, name: p.name, cards: p.cards }))
+        players: room.players.map(p => ({ 
+            id: p.id, 
+            name: p.name, 
+            cards: p.cards 
+        }))
     };
 }
 
@@ -359,7 +362,7 @@ function handleJoinRoom(roomId, playerName, clientId) {
 function handleLeaveRoom(roomId, playerId, clientId) {
     const room = rooms.get(roomId);
     if (!room) {
-        return { type: 'error', message: '房间不存在' };
+        return { success: false, error: '房间不存在' };
     }
     
     const playerIndex = room.players.findIndex(p => p.id === playerId);
@@ -368,11 +371,17 @@ function handleLeaveRoom(roomId, playerId, clientId) {
         room.players.splice(playerIndex, 1);
         
         // 通知其他玩家
-        broadcastToRoom(roomId, {
-            type: 'player_left',
-            playerId: playerId,
-            playerName: playerName,
-            players: room.players.map(p => ({ id: p.id, name: p.name, cards: p.cards }))
+        room.players.forEach(p => {
+            p.pendingMessages.push({
+                type: 'player_left',
+                playerId: playerId,
+                playerName: playerName,
+                players: room.players.map(pl => ({ 
+                    id: pl.id, 
+                    name: pl.name, 
+                    cards: pl.cards 
+                }))
+            });
         });
         
         if (room.players.length === 0) {
@@ -388,61 +397,61 @@ function handleLeaveRoom(roomId, playerId, clientId) {
         }
     }
     
-    return { type: 'left_room' };
+    return { success: true, type: 'left_room' };
 }
 
 // 开始游戏
 function handleStartGame(roomId, playerId) {
     const room = rooms.get(roomId);
     if (!room) {
-        throw new Error('房间不存在');
+        return { success: false, error: '房间不存在' };
     }
     
     if (room.players.length < 2) {
-        throw new Error('至少需要2名玩家才能开始游戏');
+        return { success: false, error: '至少需要2名玩家才能开始游戏' };
     }
     
     room.gameStarted = true;
     dealCards(room);
     
     // 通知所有玩家游戏开始
-    broadcastToRoom(roomId, {
-        type: 'game_started',
-        dealer: room.dealer,
-        currentPlayer: room.currentPlayer
-    });
-    
-    // 为每个玩家发送手牌
     room.players.forEach(player => {
+        player.pendingMessages.push({
+            type: 'game_started',
+            dealer: room.dealer,
+            currentPlayer: room.currentPlayer
+        });
+        
+        // 为每个玩家发送手牌
         player.pendingMessages.push({
             type: 'player_hand',
             hand: player.hand
         });
     });
     
-    return { type: 'game_started' };
+    return { success: true, type: 'game_started' };
 }
 
 // 出牌
 function handlePlayCards(roomId, playerId, cards) {
     const room = rooms.get(roomId);
     if (!room) {
-        throw new Error('房间不存在');
+        return { success: false, error: '房间不存在' };
     }
     
     if (room.currentPlayer !== playerId) {
-        throw new Error('现在不是你的回合');
+        return { success: false, error: '现在不是你的回合' };
     }
     
     const player = room.players.find(p => p.id === playerId);
     if (!player) {
-        throw new Error('玩家不存在');
+        return { success: false, error: '玩家不存在' };
     }
     
     // 验证出牌
     const validation = validatePlay(cards, room.lastPlay);
     if (!validation.valid) {
-        throw new Error(validation.message);
+        return { success: false, error: validation.message };
     }
     
     // 从玩家手牌中移除出的牌
@@ -471,13 +480,15 @@ function handlePlayCards(roomId, playerId, cards) {
     room.currentPlayer = room.players[nextIndex].id;
     
     // 通知所有玩家
-    broadcastToRoom(roomId, {
-        type: 'card_played',
-        playerId: playerId,
-        playerName: player.name,
-        play: play,
-        nextPlayer: room.currentPlayer,
-        newHandCount: player.cards
+    room.players.forEach(p => {
+        p.pendingMessages.push({
+            type: 'card_played',
+            playerId: playerId,
+            playerName: player.name,
+            play: play,
+            nextPlayer: room.currentPlayer,
+            newHandCount: player.cards
+        });
     });
     
     // 检查游戏是否结束
@@ -485,19 +496,21 @@ function handlePlayCards(roomId, playerId, cards) {
         endGame(room, player);
     }
     
-    return { type: 'cards_played' };
+    return { success: true, type: 'cards_played' };
 }
 
 // 不出牌
 function handlePassTurn(roomId, playerId) {
     const room = rooms.get(roomId);
     if (!room) {
-        throw new Error('房间不存在');
+        return { success: false, error: '房间不存在' };
     }
     
     if (room.currentPlayer !== playerId) {
-        throw new Error('现在不是你的回合');
+        return { success: false, error: '现在不是你的回合' };
     }
+    
+    const player = room.players.find(p => p.id === playerId);
     
     // 切换到下一个玩家
     const currentIndex = room.players.findIndex(p => p.id === playerId);
@@ -505,26 +518,28 @@ function handlePassTurn(roomId, playerId) {
     room.currentPlayer = room.players[nextIndex].id;
     
     // 通知所有玩家
-    broadcastToRoom(roomId, {
-        type: 'turn_passed',
-        playerId: playerId,
-        playerName: room.players[currentIndex].name,
-        nextPlayer: room.currentPlayer
+    room.players.forEach(p => {
+        p.pendingMessages.push({
+            type: 'turn_passed',
+            playerId: playerId,
+            playerName: player.name,
+            nextPlayer: room.currentPlayer
+        });
     });
     
-    return { type: 'turn_passed' };
+    return { success: true, type: 'turn_passed' };
 }
 
 // 获取更新
 function handleGetUpdates(roomId, playerId, clientId) {
     const room = rooms.get(roomId);
     if (!room) {
-        return { type: 'error', message: '房间不存在' };
+        return { success: false, error: '房间不存在' };
     }
     
     const player = room.players.find(p => p.id === playerId);
     if (!player) {
-        return { type: 'error', message: '玩家不存在' };
+        return { success: false, error: '玩家不存在' };
     }
     
     const messages = player.pendingMessages || [];
@@ -538,6 +553,7 @@ function handleGetUpdates(roomId, playerId, clientId) {
     }
     
     return {
+        success: true,
         type: 'updates',
         messages: messages,
         roomState: {
@@ -564,10 +580,12 @@ function endGame(room, winner) {
     }
     
     // 通知所有玩家游戏结束
-    broadcastToRoom(room.id, {
-        type: 'game_ended',
-        winnerId: winner.id,
-        winnerName: winner.name,
-        specialResult: specialResult
+    room.players.forEach(p => {
+        p.pendingMessages.push({
+            type: 'game_ended',
+            winnerId: winner.id,
+            winnerName: winner.name,
+            specialResult: specialResult
+        });
     });
 }
