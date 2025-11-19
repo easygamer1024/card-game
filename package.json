@@ -1,13 +1,12 @@
 {
   "name": "card-game",
   "version": "1.0.0",
-  "description": "干瞪眼儿纸牌游戏 - Vercel 部署版",
+  "description": "干瞪眼儿纸牌游戏 - Vercel 轮询版",
   "main": "api/game.js",
   "scripts": {
     "dev": "node api/game.js"
   },
   "dependencies": {
-    "ws": "^8.14.2",
     "uuid": "^9.0.0"
   },
   "engines": {
