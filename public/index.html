@@ -2,21 +2,25 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>干瞪眼儿纸牌游戏</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>干瞪眼儿</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
         }
         
         body {
-            font-family: 'Microsoft YaHei', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            padding: 20px;
+            padding: 10px;
             color: #333;
+            overflow-x: hidden;
         }
         
         .container {
@@ -31,31 +35,32 @@
         header {
             background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
             color: white;
-            padding: 20px;
+            padding: 15px 20px;
             text-align: center;
         }
         
         h1 {
-            font-size: 2em;
-            margin-bottom: 10px;
+            font-size: 1.5em;
+            margin-bottom: 5px;
         }
         
         .subtitle {
-            font-size: 1em;
+            font-size: 0.9em;
             opacity: 0.9;
         }
         
         .content {
-            padding: 20px;
+            padding: 15px;
         }
         
         .connection-status {
             display: flex;
             align-items: center;
-            margin-bottom: 20px;
-            padding: 10px 15px;
+            margin-bottom: 15px;
+            padding: 8px 12px;
             border-radius: 8px;
             font-weight: bold;
+            font-size: 0.9em;
         }
         
         .connected {
@@ -71,10 +76,10 @@
         }
         
         .status-dot {
-            width: 12px;
-            height: 12px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
-            margin-right: 10px;
+            margin-right: 8px;
         }
         
         .connected .status-dot {
@@ -86,13 +91,14 @@
         }
         
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
         
         label {
             display: block;
             margin-bottom: 5px;
             font-weight: bold;
+            font-size: 0.9em;
         }
         
         input, button {
@@ -100,7 +106,7 @@
             padding: 12px 15px;
             border: 1px solid #ddd;
             border-radius: 6px;
-            font-size: 16px;
+            font-size: 16px; /* 防止iOS缩放 */
         }
         
         button {
@@ -110,9 +116,10 @@
             cursor: pointer;
             transition: all 0.3s ease;
             font-weight: bold;
+            touch-action: manipulation;
         }
         
-        button:hover {
+        button:hover, button:active {
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
         }
@@ -126,50 +133,54 @@
         
         .room-info {
             background: #f8f9fa;
-            padding: 15px;
+            padding: 12px;
             border-radius: 8px;
-            margin-top: 20px;
+            margin-top: 15px;
+            font-size: 0.9em;
         }
         
         .players-list {
-            margin-top: 15px;
+            margin-top: 12px;
         }
         
         .player-item {
-            padding: 8px 12px;
+            padding: 6px 10px;
             background: white;
-            margin-bottom: 5px;
+            margin-bottom: 4px;
             border-radius: 4px;
             border-left: 4px solid #667eea;
+            font-size: 0.85em;
         }
         
         .game-area {
-            margin-top: 20px;
+            margin-top: 15px;
         }
         
         .player-hand {
             display: flex;
             flex-wrap: wrap;
-            gap: 10px;
-            margin: 20px 0;
+            gap: 8px;
+            margin: 15px 0;
+            justify-content: center;
         }
         
         .card {
-            width: 70px;
-            height: 100px;
+            width: 60px;
+            height: 85px;
             background: white;
-            border-radius: 8px;
+            border-radius: 6px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            padding: 8px;
-            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+            padding: 6px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
             cursor: pointer;
             transition: all 0.3s ease;
             border: 2px solid transparent;
+            touch-action: manipulation;
         }
         
-        .card:hover {
+        .card:hover, .card:active {
             transform: translateY(-5px);
         }
         
@@ -187,38 +198,40 @@
         }
         
         .card-value {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: bold;
         }
         
         .card-suit {
-            font-size: 16px;
+            font-size: 14px;
             text-align: center;
         }
         
         .game-controls {
             display: flex;
-            gap: 10px;
-            margin-top: 20px;
+            gap: 8px;
+            margin-top: 15px;
         }
         
         .game-controls button {
             flex: 1;
+            padding: 10px;
         }
         
         .messages {
             background: #f8f9fa;
             border-radius: 8px;
-            padding: 15px;
-            margin-top: 20px;
-            max-height: 200px;
+            padding: 12px;
+            margin-top: 15px;
+            max-height: 150px;
             overflow-y: auto;
             border: 1px solid #e9ecef;
+            font-size: 0.85em;
         }
         
         .message {
-            margin-bottom: 8px;
-            padding: 8px 12px;
+            margin-bottom: 6px;
+            padding: 6px 10px;
             background: white;
             border-radius: 4px;
             border-left: 3px solid #667eea;
@@ -228,23 +241,56 @@
             display: none;
         }
         
-        @media (max-width: 600px) {
+        .divider {
+            text-align: center;
+            margin: 12px 0;
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        @media (max-width: 480px) {
+            body {
+                padding: 5px;
+            }
+            
             .container {
-                margin: 10px;
                 border-radius: 10px;
             }
             
+            header {
+                padding: 12px 15px;
+            }
+            
+            h1 {
+                font-size: 1.3em;
+            }
+            
+            .content {
+                padding: 12px;
+            }
+            
             .card {
-                width: 60px;
-                height: 85px;
+                width: 50px;
+                height: 70px;
             }
             
             .card-value {
-                font-size: 16px;
+                font-size: 14px;
             }
             
             .card-suit {
-                font-size: 14px;
+                font-size: 12px;
+            }
+            
+            input, button {
+                padding: 10px 12px;
+            }
+        }
+        
+        @media (max-width: 320px) {
+            .card {
+                width: 45px;
+                height: 65px;
             }
         }
     </style>
@@ -252,8 +298,8 @@
 <body>
     <div class="container">
         <header>
-            <h1>干瞪眼儿纸牌游戏</h1>
-            <div class="subtitle">经典纸牌游戏在线版</div>
+            <h1>干瞪眼儿</h1>
+            <div class="subtitle">蜜雪冰城在线版</div>
         </header>
         
         <div class="content">
@@ -272,7 +318,7 @@
                     <button id="createRoomBtn">创建房间</button>
                 </div>
                 
-                <div style="text-align: center; margin: 15px 0; color: #666;">或</div>
+                <div class="divider">或</div>
                 
                 <div class="form-group">
                     <label for="roomId">房间号</label>
@@ -321,7 +367,7 @@
             </div>
             
             <div class="messages" id="gameMessages">
-                <div class="message">欢迎来到干瞪眼儿游戏！请创建或加入房间开始游戏。</div>
+                <div class="message">欢迎瞪眼儿！准备好蜜雪冰城了吗？</div>
             </div>
         </div>
     </div>
@@ -334,6 +380,7 @@
         let selectedCards = [];
         let clientId = null;
         let pollInterval = null;
+        let lastMyTurnMessage = 0;
         
         // 生成客户端ID
         function generateClientId() {
@@ -570,22 +617,27 @@
             });
         }
         
-        // 更新游戏状态
+        // 更新游戏状态 - 修复：防止重复显示回合消息
         function updateGameState(roomState) {
             if (roomState.players) {
                 updatePlayersList(roomState.players);
             }
             
             // 更新游戏控制按钮状态
-            const isMyTurn = roomState.currentPlayer === currentPlayerId;
+            const isMyTurn = roomState.gameStarted && roomState.currentPlayer === currentPlayerId;
             const playCardsBtn = document.getElementById('playCardsBtn');
             const passTurnBtn = document.getElementById('passTurnBtn');
             
             playCardsBtn.disabled = !isMyTurn || selectedCards.length === 0;
             passTurnBtn.disabled = !isMyTurn;
             
+            // 防止重复显示回合消息
             if (isMyTurn) {
-                showMessage('轮到您的回合了！');
+                const now = Date.now();
+                if (now - lastMyTurnMessage > 10000) { // 10秒内只显示一次
+                    showMessage('赶紧出牌！');
+                    lastMyTurnMessage = now;
+                }
             }
         }
         
@@ -626,8 +678,7 @@
             
             // 更新出牌按钮状态
             const playCardsBtn = document.getElementById('playCardsBtn');
-            const isMyTurn = true; // 这里应该根据实际游戏状态判断
-            playCardsBtn.disabled = !isMyTurn || selectedCards.length === 0;
+            playCardsBtn.disabled = selectedCards.length === 0;
         }
         
         // 显示消息
@@ -638,6 +689,12 @@
             messageElement.textContent = message;
             
             messagesElement.appendChild(messageElement);
+            
+            // 限制消息数量，防止过多
+            if (messagesElement.children.length > 20) {
+                messagesElement.removeChild(messagesElement.firstChild);
+            }
+            
             messagesElement.scrollTop = messagesElement.scrollHeight;
         }
         
@@ -747,6 +804,7 @@
             currentPlayerId = null;
             playerHand = [];
             selectedCards = [];
+            lastMyTurnMessage = 0;
             
             updateConnectionStatus(true);
         }
@@ -764,7 +822,10 @@
             document.getElementById('playCardsBtn').addEventListener('click', playCards);
             document.getElementById('passTurnBtn').addEventListener('click', passTurn);
             
-            showMessage('游戏已就绪，请创建或加入房间');
+            // 添加触摸事件支持
+            document.addEventListener('touchstart', function() {}, {passive: true});
+            
+            showMessage('游戏已就绪，请准备好蜜雪冰城');
         }
         
         // 页面加载时初始化

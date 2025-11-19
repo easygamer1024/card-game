@@ -1,6 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 
-// 内存存储（在生产环境中应考虑使用 Redis 等持久化方案）
+// 内存存储
 const rooms = new Map();
 const clients = new Map();
 
@@ -99,16 +99,16 @@ function isBomb(cards) {
 function cleanupExpiredData() {
     const now = Date.now();
     
-    // 清理过期的客户端
+    // 清理过期的客户端（5分钟无活动）
     for (let [clientId, client] of clients.entries()) {
-        if (now - client.lastSeen > 60000) { // 60秒无活动
+        if (now - client.lastSeen > 300000) {
             clients.delete(clientId);
         }
     }
     
-    // 清理空房间
+    // 清理空房间和长时间无活动的房间（10分钟）
     for (let [roomId, room] of rooms.entries()) {
-        if (room.players.length === 0) {
+        if (room.players.length === 0 || (now - room.createdAt > 600000 && !room.gameStarted)) {
             rooms.delete(roomId);
         }
     }
@@ -268,7 +268,7 @@ function handleCreateRoom(playerName, clientId) {
         id: roomId,
         players: [player],
         dealer: playerId,
-        currentPlayer: playerId,
+        currentPlayer: null, // 修复：游戏开始前没有当前玩家
         gameStarted: false,
         drawPile: [],
         discardPile: [],
@@ -412,6 +412,7 @@ function handleStartGame(roomId, playerId) {
     }
     
     room.gameStarted = true;
+    room.currentPlayer = room.dealer; // 修复：游戏开始时设置当前玩家为庄家
     dealCards(room);
     
     // 通知所有玩家游戏开始
@@ -437,6 +438,10 @@ function handlePlayCards(roomId, playerId, cards) {
     const room = rooms.get(roomId);
     if (!room) {
         return { success: false, error: '房间不存在' };
+    }
+    
+    if (!room.gameStarted) {
+        return { success: false, error: '游戏尚未开始' };
     }
     
     if (room.currentPlayer !== playerId) {
@@ -504,6 +509,10 @@ function handlePassTurn(roomId, playerId) {
     const room = rooms.get(roomId);
     if (!room) {
         return { success: false, error: '房间不存在' };
+    }
+    
+    if (!room.gameStarted) {
+        return { success: false, error: '游戏尚未开始' };
     }
     
     if (room.currentPlayer !== playerId) {
@@ -588,4 +597,10 @@ function endGame(room, winner) {
             specialResult: specialResult
         });
     });
+    
+    // 重置游戏状态
+    room.gameStarted = false;
+    room.currentPlayer = null;
+    room.currentPlay = null;
+    room.lastPlay = null;
 }
