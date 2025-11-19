@@ -597,19 +597,48 @@ async function sendRequest(action, data = {}) {
         }
     }
     
-    // 处理游戏开始
-    function handleGameStarted(data) {
-        document.getElementById('roomView').classList.add('hidden');
-        document.getElementById('gameView').classList.remove('hidden');
-        showMessage('游戏开始！庄家先出牌');
+// 处理游戏开始消息 - 增强版本
+function handleGameStarted(data) {
+    console.log('处理游戏开始消息:', data);
+    
+    // 隐藏房间视图，显示游戏视图
+    document.getElementById('roomView').classList.add('hidden');
+    document.getElementById('gameView').classList.remove('hidden');
+    
+    let message = data.message || '游戏开始！';
+    if (data.dealer === currentPlayerId) {
+        message += ' 您是庄家，请先出牌';
+    } else {
+        message += ' 等待其他玩家出牌...';
     }
     
-    // 处理手牌
-    function handlePlayerHand(data) {
-        playerHand = data.hand;
-        renderPlayerHand();
-        showMessage('您的手牌已发放');
+    showMessage(message);
+    
+    // 更新玩家列表显示
+    if (window.currentRoomState && window.currentRoomState.players) {
+        updatePlayersList(window.currentRoomState.players);
     }
+}
+
+// 处理手牌消息 - 增强版本
+function handlePlayerHand(data) {
+    console.log('收到手牌:', data);
+    playerHand = data.hand || [];
+    
+    // 按牌值排序手牌，方便玩家查看
+    playerHand.sort((a, b) => {
+        const values = ['3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A', '2', 'Joker'];
+        return values.indexOf(a.value) - values.indexOf(b.value);
+    });
+    
+    renderPlayerHand();
+    showMessage(`您收到 ${data.handCount || playerHand.length} 张手牌`);
+    
+    // 检查是否是当前玩家回合
+    if (window.currentRoomState && window.currentRoomState.currentPlayer === currentPlayerId) {
+        showMessage('赶紧出牌！');
+    }
+}
     
     // 处理出牌
     function handleCardPlayed(data) {
@@ -647,29 +676,49 @@ async function sendRequest(action, data = {}) {
         });
     }
     
-    // 更新游戏状态 - 修复：防止重复显示回合消息
-    function updateGameState(roomState) {
-        if (roomState && roomState.players) {
-            updatePlayersList(roomState.players);
-        }
+    // 更新游戏状态 - 增强版本
+function updateGameState(roomState) {
+    console.log('更新游戏状态:', roomState);
+    
+    // 保存房间状态供其他函数使用
+    window.currentRoomState = roomState;
+    
+    if (roomState && roomState.players) {
+        updatePlayersList(roomState.players);
+    }
+    
+    // 更新游戏控制按钮状态
+    const isMyTurn = roomState && roomState.gameStarted && roomState.currentPlayer === currentPlayerId;
+    const playCardsBtn = document.getElementById('playCardsBtn');
+    const passTurnBtn = document.getElementById('passTurnBtn');
+    
+    playCardsBtn.disabled = !isMyTurn || selectedCards.length === 0;
+    passTurnBtn.disabled = !isMyTurn;
+    
+    // 更新开始游戏按钮状态（在房间视图中）
+    const startGameBtn = document.getElementById('startGameBtn');
+    if (startGameBtn) {
+        const canStartGame = roomState && !roomState.gameStarted && roomState.players && roomState.players.length >= 2;
+        startGameBtn.disabled = !canStartGame;
         
-        // 更新游戏控制按钮状态
-        const isMyTurn = roomState && roomState.gameStarted && roomState.currentPlayer === currentPlayerId;
-        const playCardsBtn = document.getElementById('playCardsBtn');
-        const passTurnBtn = document.getElementById('passTurnBtn');
-        
-        playCardsBtn.disabled = !isMyTurn || selectedCards.length === 0;
-        passTurnBtn.disabled = !isMyTurn;
-        
-        // 防止重复显示回合消息
-        if (isMyTurn) {
-            const now = Date.now();
-            if (now - lastMyTurnMessage > 10000) { // 10秒内只显示一次
-                showMessage('赶紧出牌！');
-                lastMyTurnMessage = now;
-            }
+        if (canStartGame) {
+            startGameBtn.textContent = '开始游戏';
+        } else if (roomState && roomState.gameStarted) {
+            startGameBtn.textContent = '游戏已开始';
+        } else {
+            startGameBtn.textContent = `需要至少2名玩家 (当前: ${roomState.players ? roomState.players.length : 0})`;
         }
     }
+    
+    // 防止重复显示回合消息
+    if (isMyTurn) {
+        const now = Date.now();
+        if (now - lastMyTurnMessage > 10000) { // 10秒内只显示一次
+            showMessage('赶紧出牌！');
+            lastMyTurnMessage = now;
+        }
+    }
+}
     
     // 渲染玩家手牌
     function renderPlayerHand() {
@@ -822,6 +871,27 @@ async function joinRoom() {
         resetGame();
         showMessage('已离开房间');
     }
+// 开始游戏 - 添加详细调试
+async function startGame() {
+    console.log('开始游戏按钮被点击');
+    console.log('当前房间ID:', currentRoomId);
+    console.log('当前玩家ID:', currentPlayerId);
+    
+    try {
+        showMessage('正在开始游戏...');
+        const result = await sendRequest('start_game');
+        console.log('开始游戏响应:', result);
+        
+        if (result.success) {
+            showMessage('游戏开始请求已发送');
+        } else {
+            showMessage('开始游戏失败: ' + (result.error || '未知错误'));
+        }
+    } catch (error) {
+        console.error('开始游戏错误:', error);
+        showMessage('开始游戏错误: ' + error.message);
+    }
+}
     
     // 出牌
     async function playCards() {

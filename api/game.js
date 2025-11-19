@@ -525,39 +525,71 @@ function handleLeaveRoom(roomId, playerId, clientId) {
     return { success: true, type: 'left_room' };
 }
 
-// 开始游戏
+// 开始游戏 - 修复版本
 function handleStartGame(roomId, playerId) {
+    console.log(`处理开始游戏请求: 房间 ${roomId}, 玩家 ${playerId}`);
+    
     const room = rooms.get(roomId);
     if (!room) {
+        console.log(`房间不存在: ${roomId}`);
         return { success: false, error: '房间不存在' };
     }
     
+    // 检查请求者是否是房间中的玩家
+    const requestingPlayer = room.players.find(p => p.id === playerId);
+    if (!requestingPlayer) {
+        console.log(`玩家 ${playerId} 不在房间 ${roomId} 中`);
+        return { success: false, error: '玩家不在房间中' };
+    }
+    
     if (room.players.length < 2) {
+        console.log(`玩家数量不足: ${room.players.length}`);
         return { success: false, error: '至少需要2名玩家才能开始游戏' };
     }
     
-    room.gameStarted = true;
-    room.currentPlayer = room.dealer;
-    dealCards(room);
+    if (room.gameStarted) {
+        console.log(`游戏已经开始了`);
+        return { success: false, error: '游戏已经开始了' };
+    }
     
-    // 通知所有玩家游戏开始
-    room.players.forEach(player => {
-        player.pendingMessages.push({
-            type: 'game_started',
-            dealer: room.dealer,
-            currentPlayer: room.currentPlayer
+    try {
+        room.gameStarted = true;
+        room.currentPlayer = room.dealer;
+        
+        console.log(`开始发牌...`);
+        dealCards(room);
+        
+        // 通知所有玩家游戏开始
+        room.players.forEach(player => {
+            player.pendingMessages.push({
+                type: 'game_started',
+                dealer: room.dealer,
+                currentPlayer: room.currentPlayer,
+                message: '游戏开始！庄家先出牌'
+            });
+            
+            // 为每个玩家发送手牌
+            player.pendingMessages.push({
+                type: 'player_hand',
+                hand: player.hand,
+                handCount: player.hand.length
+            });
+            
+            console.log(`向玩家 ${player.name} 发送了 ${player.hand.length} 张牌`);
         });
         
-        // 为每个玩家发送手牌
-        player.pendingMessages.push({
-            type: 'player_hand',
-            hand: player.hand
-        });
-    });
-    
-    console.log(`游戏开始: ${roomId}, 庄家: ${room.dealer}`);
-    
-    return { success: true, type: 'game_started' };
+        console.log(`游戏开始成功: ${roomId}, 庄家: ${room.dealer}, 玩家数: ${room.players.length}`);
+        
+        return { 
+            success: true, 
+            type: 'game_started',
+            message: '游戏开始成功'
+        };
+    } catch (error) {
+        console.error('开始游戏过程中出错:', error);
+        room.gameStarted = false;
+        return { success: false, error: '开始游戏失败: ' + error.message };
+    }
 }
 
 // 出牌
