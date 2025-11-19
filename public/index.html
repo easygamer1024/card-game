@@ -404,47 +404,55 @@
         updateConnectionStatus(true); // 默认显示已连接
     }
     
-    // 发送请求到服务器
-    async function sendRequest(action, data = {}) {
-        const url = '/api/game';
-        const requestData = {
-            action,
-            clientId,
-            roomId: currentRoomId,
-            playerId: currentPlayerId,
-            ...data
-        };
-        
-        try {
-            console.log('发送请求:', action, requestData);
-            
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestData)
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP错误: ${response.status}`);
-            }
-            
-            const result = await response.json();
-            console.log('收到响应:', result);
-            
-            if (!result.success) {
-                throw new Error(result.error || '请求失败');
-            }
-            
-            return result;
-        } catch (error) {
-            console.error('请求错误:', error);
-            showMessage('错误: ' + error.message);
-            updateConnectionStatus(false);
-            throw error;
-        }
+// 发送请求到服务器 - 修复参数处理
+async function sendRequest(action, data = {}) {
+    const url = '/api/game';
+    
+    // 构建请求数据，确保正确处理所有参数
+    const requestData = {
+        action: action,
+        clientId: clientId,
+        ...data  // 将传入的数据展开，这样roomId和playerName会正确传递
+    };
+    
+    // 只有在已有房间和玩家ID时才添加这些参数
+    if (currentRoomId) {
+        requestData.roomId = currentRoomId;
     }
+    if (currentPlayerId) {
+        requestData.playerId = currentPlayerId;
+    }
+    
+    try {
+        console.log('发送请求:', action, '数据:', requestData);
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP错误: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        console.log('收到响应:', result);
+        
+        if (!result.success) {
+            throw new Error(result.error || '请求失败');
+        }
+        
+        return result;
+    } catch (error) {
+        console.error('请求错误:', error);
+        showMessage('错误: ' + error.message);
+        updateConnectionStatus(false);
+        throw error;
+    }
+}
     
     // 检查房间是否存在
     async function checkRoomExists(roomId) {
@@ -746,11 +754,13 @@
         }
     }
     
-// 加入房间 - 添加房间检查
+// 加入房间 - 完全修复版本
 async function joinRoom() {
     const roomIdInput = document.getElementById('roomId');
     const roomId = roomIdInput.value.trim();
     const playerName = document.getElementById('playerName').value.trim() || '玩家';
+    
+    console.log('尝试加入房间:', roomId, '玩家:', playerName);
     
     if (!roomId) {
         showMessage('请输入房间号');
@@ -767,25 +777,35 @@ async function joinRoom() {
     try {
         showMessage('正在加入房间 ' + roomId + '...');
         
+        // 直接发送请求，不依赖currentRoomId（此时为null）
         const result = await sendRequest('join_room', { 
             roomId: roomId, 
             playerName: playerName 
         });
+        
+        console.log('加入房间响应:', result);
         
         if (result.success) {
             handleServerMessage(result);
         } else {
             // 显示详细的错误信息
             let errorMsg = result.error || '加入房间失败';
-            if (result.debug && result.debug.availableRooms) {
-                errorMsg += '。当前可用房间: ' + (result.debug.availableRooms.length > 0 ? 
-                    result.debug.availableRooms.join(', ') : '无');
+            if (result.debug) {
+                errorMsg += ' (请求: ' + result.debug.requested + ', 标准化: ' + result.debug.normalized + ')';
+                if (result.debug.availableRooms && result.debug.availableRooms.length > 0) {
+                    errorMsg += '。可用房间: ' + result.debug.availableRooms.join(', ');
+                }
             }
             showMessage(errorMsg);
+            
+            // 如果是房间不存在，显示创建房间的提示
+            if (result.error === '房间不存在') {
+                showMessage('提示：您可以点击"创建房间"按钮创建新房间');
+            }
         }
     } catch (error) {
+        console.error('加入房间网络错误:', error);
         showMessage('网络错误: ' + error.message);
-        console.error('加入房间错误:', error);
     }
 }
     
@@ -846,7 +866,7 @@ async function joinRoom() {
         updateConnectionStatus(true);
     }
     
-    // 初始化
+   // 初始化
 function initialize() {
     initializeClient();
     
@@ -876,23 +896,48 @@ function initialize() {
     
     showMessage('游戏已就绪，请输入房间号或创建新房间');
     
-    // 测试服务器连接
+    // 增强的连接测试
     testConnection();
-}
     
-    // 测试服务器连接
-    async function testConnection() {
-        try {
-            const response = await fetch('/health');
-            if (response.ok) {
-                const data = await response.json();
-                console.log('服务器健康状态:', data);
-                updateConnectionStatus(true);
+    // 添加重新连接按钮
+    addReconnectButton();
+}
+
+// 添加重新连接功能
+function addReconnectButton() {
+    const connectionStatus = document.getElementById('connectionStatus');
+    connectionStatus.style.cursor = 'pointer';
+    connectionStatus.title = '点击重新连接';
+    connectionStatus.addEventListener('click', function() {
+        showMessage('重新连接中...');
+        testConnection();
+    });
+}
+
+// 增强的连接测试
+async function testConnection() {
+    try {
+        showMessage('测试服务器连接...');
+        const response = await fetch('/health');
+        if (response.ok) {
+            const data = await response.json();
+            console.log('服务器健康状态:', data);
+            updateConnectionStatus(true);
+            showMessage('服务器连接正常！当前有 ' + data.rooms + ' 个房间');
+            
+            // 如果有房间，显示房间列表
+            if (data.roomList && data.roomList.length > 0) {
+                showMessage('可用房间: ' + data.roomList.map(room => room.id + '(' + room.playerCount + '人)').join(', '));
             }
-        } catch (error) {
-            console.error('连接测试失败:', error);
+        } else {
+            throw new Error('服务器响应异常');
         }
+    } catch (error) {
+        console.error('连接测试失败:', error);
+        showMessage('服务器连接失败: ' + error.message);
+        updateConnectionStatus(false);
     }
+}
     
     // 页面加载时初始化
     document.addEventListener('DOMContentLoaded', initialize);

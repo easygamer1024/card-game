@@ -156,6 +156,31 @@ module.exports = async (req, res) => {
             return;
         }
         
+        // 调试端点：查看所有房间详情
+        if (path === '/debug' && method === 'GET') {
+            const debugInfo = {
+                totalRooms: rooms.size,
+                totalClients: clients.size,
+                rooms: Array.from(rooms.entries()).map(([id, room]) => ({
+                    id: id,
+                    playerCount: room.players.length,
+                    gameStarted: room.gameStarted,
+                    createdAt: new Date(room.createdAt).toISOString(),
+                    players: room.players.map(p => ({
+                        id: p.id,
+                        name: p.name,
+                        cards: p.cards
+                    })),
+                    currentPlayer: room.currentPlayer,
+                    dealer: room.dealer
+                })),
+                timestamp: new Date().toISOString()
+            };
+            
+            res.json(debugInfo);
+            return;
+        }
+        
         // 房间信息端点
         if (path === '/rooms' && method === 'GET') {
             const roomInfo = Array.from(rooms.entries()).map(([id, room]) => ({
@@ -221,9 +246,20 @@ module.exports = async (req, res) => {
                 return;
             }
             
-            const { action, clientId, roomId, playerId, ...data } = body;
+            // 新的参数提取方式
+const { action, clientId, ...requestBody } = body;
+
+// 根据action提取不同的参数
+let roomId, playerId;
+
+// 对于需要roomId和playerId的action，从requestBody中提取
+if (action !== 'create_room' && action !== 'join_room' && action !== 'check_room') {
+    roomId = requestBody.roomId;
+    playerId = requestBody.playerId;
+}
             
-            console.log(`处理请求: ${action}, 房间: ${roomId}, 玩家: ${playerId}`);
+            // 添加详细的调试日志
+            console.log(`处理请求: ${method} ${path}, 房间: ${roomId}, 玩家: ${playerId}, 动作: ${action}`);
             
             // 验证客户端
             if (clientId) {
@@ -239,36 +275,38 @@ module.exports = async (req, res) => {
             }
             
             let result;
-            
-            switch (action) {
-                case 'create_room':
-                    result = handleCreateRoom(data.playerName, clientId);
-                    break;
-                case 'join_room':
-                    result = handleJoinRoom(data.roomId, data.playerName, clientId);
-                    break;
-                case 'leave_room':
-                    result = handleLeaveRoom(roomId, playerId, clientId);
-                    break;
-                case 'start_game':
-                    result = handleStartGame(roomId, playerId);
-                    break;
-                case 'play_cards':
-                    result = handlePlayCards(roomId, playerId, data.cards);
-                    break;
-                case 'pass_turn':
-                    result = handlePassTurn(roomId, playerId);
-                    break;
-                case 'get_updates':
-                    result = handleGetUpdates(roomId, playerId, clientId);
-                    break;
-                case 'check_room':
-                    result = handleCheckRoom(data.roomId);
-                    break;
-                default:
-                    res.status(400).json({ error: '未知的操作', action: action });
-                    return;
-            }
+
+// 修改switch语句，直接使用requestBody
+switch (action) {
+    case 'create_room':
+        result = handleCreateRoom(requestBody.playerName, clientId);
+        break;
+    case 'join_room':
+        // 确保这里使用requestBody中的参数
+        result = handleJoinRoom(requestBody.roomId, requestBody.playerName, clientId);
+        break;
+    case 'leave_room':
+        result = handleLeaveRoom(roomId, playerId, clientId);
+        break;
+    case 'start_game':
+        result = handleStartGame(roomId, playerId);
+        break;
+    case 'play_cards':
+        result = handlePlayCards(roomId, playerId, requestBody.cards);
+        break;
+    case 'pass_turn':
+        result = handlePassTurn(roomId, playerId);
+        break;
+    case 'get_updates':
+        result = handleGetUpdates(roomId, playerId, clientId);
+        break;
+    case 'check_room':
+        result = handleCheckRoom(requestBody.roomId);
+        break;
+    default:
+        res.status(400).json({ error: '未知的操作', action: action });
+        return;
+}
             
             // 清理过期数据（每10次请求清理一次，减少性能影响）
             if (Math.random() < 0.1) {
@@ -282,7 +320,7 @@ module.exports = async (req, res) => {
         // 默认响应
         res.json({ 
             message: '干瞪眼儿游戏服务器 API',
-            endpoints: ['/health', '/rooms', '/api/game', '/api/room/:id'],
+            endpoints: ['/health', '/debug', '/rooms', '/api/game', '/api/room/:id'],
             timestamp: new Date().toISOString()
         });
         
@@ -363,7 +401,7 @@ function handleJoinRoom(roomId, playerName, clientId) {
     }
     
     // 统一转为大写查找
-    const roomIdUpper = roomId.toUpperCase();
+    const roomIdUpper = roomId.toUpperCase().trim();
     const room = rooms.get(roomIdUpper);
     
     if (!room) {
@@ -376,7 +414,8 @@ function handleJoinRoom(roomId, playerName, clientId) {
             debug: {
                 requested: roomId,
                 normalized: roomIdUpper,
-                availableRooms: availableRooms
+                availableRooms: availableRooms,
+                totalRooms: rooms.size
             }
         };
     }
