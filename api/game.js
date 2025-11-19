@@ -95,23 +95,29 @@ function isBomb(cards) {
     return false;
 }
 
-// 清理过期数据
+// 清理过期数据 - 延长存活时间
 function cleanupExpiredData() {
     const now = Date.now();
+    console.log(`清理前: ${rooms.size} 个房间, ${clients.size} 个客户端`);
     
-    // 清理过期的客户端（5分钟无活动）
+    // 清理过期的客户端（10分钟无活动）
     for (let [clientId, client] of clients.entries()) {
-        if (now - client.lastSeen > 300000) {
+        if (now - client.lastSeen > 600000) {
+            console.log(`清理过期客户端: ${clientId}`);
             clients.delete(clientId);
         }
     }
     
-    // 清理空房间和长时间无活动的房间（10分钟）
+    // 清理空房间和长时间无活动的房间（30分钟）
     for (let [roomId, room] of rooms.entries()) {
-        if (room.players.length === 0 || (now - room.createdAt > 600000 && !room.gameStarted)) {
+        const roomAge = now - room.createdAt;
+        if (room.players.length === 0 || (roomAge > 1800000 && !room.gameStarted)) {
+            console.log(`清理房间: ${roomId}, 存活时间: ${Math.round(roomAge/1000)}秒, 玩家数: ${room.players.length}`);
             rooms.delete(roomId);
         }
     }
+    
+    console.log(`清理后: ${rooms.size} 个房间, ${clients.size} 个客户端`);
 }
 
 // 主处理函数
@@ -132,10 +138,19 @@ module.exports = async (req, res) => {
     try {
         // 健康检查端点
         if (path === '/health' && method === 'GET') {
+            const roomList = Array.from(rooms.entries()).map(([id, room]) => ({
+                id: id,
+                playerCount: room.players.length,
+                gameStarted: room.gameStarted,
+                createdAt: room.createdAt,
+                players: room.players.map(p => p.name)
+            }));
+            
             res.json({ 
                 status: 'ok', 
                 rooms: rooms.size,
                 clients: clients.size,
+                roomList: roomList,
                 timestamp: new Date().toISOString()
             });
             return;
@@ -150,6 +165,28 @@ module.exports = async (req, res) => {
                 players: room.players.map(p => p.name)
             }));
             res.json(roomInfo);
+            return;
+        }
+        
+        // 调试端点：查看特定房间
+        if (path.startsWith('/api/room/') && method === 'GET') {
+            const roomId = path.split('/').pop().toUpperCase();
+            const room = rooms.get(roomId);
+            if (room) {
+                res.json({
+                    exists: true,
+                    roomId: room.id,
+                    playerCount: room.players.length,
+                    gameStarted: room.gameStarted,
+                    players: room.players.map(p => ({ id: p.id, name: p.name })),
+                    createdAt: room.createdAt
+                });
+            } else {
+                res.json({ 
+                    exists: false,
+                    availableRooms: Array.from(rooms.keys())
+                });
+            }
             return;
         }
         
@@ -185,6 +222,8 @@ module.exports = async (req, res) => {
             }
             
             const { action, clientId, roomId, playerId, ...data } = body;
+            
+            console.log(`处理请求: ${action}, 房间: ${roomId}, 玩家: ${playerId}`);
             
             // 验证客户端
             if (clientId) {
@@ -223,13 +262,18 @@ module.exports = async (req, res) => {
                 case 'get_updates':
                     result = handleGetUpdates(roomId, playerId, clientId);
                     break;
+                case 'check_room':
+                    result = handleCheckRoom(data.roomId);
+                    break;
                 default:
                     res.status(400).json({ error: '未知的操作', action: action });
                     return;
             }
             
-            // 清理过期数据
-            cleanupExpiredData();
+            // 清理过期数据（每10次请求清理一次，减少性能影响）
+            if (Math.random() < 0.1) {
+                cleanupExpiredData();
+            }
             
             res.json(result);
             return;
@@ -238,7 +282,7 @@ module.exports = async (req, res) => {
         // 默认响应
         res.json({ 
             message: '干瞪眼儿游戏服务器 API',
-            endpoints: ['/health', '/rooms', '/api/game'],
+            endpoints: ['/health', '/rooms', '/api/game', '/api/room/:id'],
             timestamp: new Date().toISOString()
         });
         
@@ -250,6 +294,21 @@ module.exports = async (req, res) => {
         });
     }
 };
+
+// 检查房间是否存在
+function handleCheckRoom(roomId) {
+    const room = rooms.get(roomId.toUpperCase());
+    return {
+        success: true,
+        exists: !!room,
+        roomId: roomId,
+        room: room ? {
+            playerCount: room.players.length,
+            gameStarted: room.gameStarted,
+            players: room.players.map(p => p.name)
+        } : null
+    };
+}
 
 // 创建房间
 function handleCreateRoom(playerName, clientId) {
@@ -268,7 +327,7 @@ function handleCreateRoom(playerName, clientId) {
         id: roomId,
         players: [player],
         dealer: playerId,
-        currentPlayer: null, // 修复：游戏开始前没有当前玩家
+        currentPlayer: null,
         gameStarted: false,
         drawPile: [],
         discardPile: [],
@@ -287,6 +346,8 @@ function handleCreateRoom(playerName, clientId) {
         }
     }
     
+    console.log(`房间创建: ${roomId}, 玩家: ${player.name}, 总房间数: ${rooms.size}`);
+    
     return {
         success: true,
         type: 'room_created',
@@ -295,11 +356,29 @@ function handleCreateRoom(playerName, clientId) {
     };
 }
 
-// 加入房间
+// 加入房间 - 修复房间查找逻辑
 function handleJoinRoom(roomId, playerName, clientId) {
-    const room = rooms.get(roomId);
+    if (!roomId) {
+        return { success: false, error: '房间号不能为空' };
+    }
+    
+    // 统一转为大写查找
+    const roomIdUpper = roomId.toUpperCase();
+    const room = rooms.get(roomIdUpper);
+    
     if (!room) {
-        return { success: false, error: '房间不存在' };
+        // 返回所有可用房间用于调试
+        const availableRooms = Array.from(rooms.keys());
+        console.log(`房间不存在: ${roomIdUpper}, 可用房间: ${availableRooms.join(', ')}`);
+        return { 
+            success: false, 
+            error: '房间不存在',
+            debug: {
+                requested: roomId,
+                normalized: roomIdUpper,
+                availableRooms: availableRooms
+            }
+        };
     }
     
     if (room.players.length >= 6) {
@@ -324,7 +403,7 @@ function handleJoinRoom(roomId, playerName, clientId) {
     if (clientId) {
         const client = clients.get(clientId);
         if (client) {
-            client.roomId = roomId;
+            client.roomId = roomIdUpper;
             client.playerId = playerId;
         }
     }
@@ -345,10 +424,12 @@ function handleJoinRoom(roomId, playerName, clientId) {
         }
     });
     
+    console.log(`玩家 ${player.name} 加入房间: ${roomIdUpper}, 当前玩家数: ${room.players.length}`);
+    
     return {
         success: true,
         type: 'room_joined',
-        roomId: roomId,
+        roomId: roomIdUpper,
         playerId: playerId,
         players: room.players.map(p => ({ 
             id: p.id, 
@@ -360,7 +441,11 @@ function handleJoinRoom(roomId, playerName, clientId) {
 
 // 离开房间
 function handleLeaveRoom(roomId, playerId, clientId) {
-    const room = rooms.get(roomId);
+    if (!roomId) {
+        return { success: false, error: '房间号不能为空' };
+    }
+    
+    const room = rooms.get(roomId.toUpperCase());
     if (!room) {
         return { success: false, error: '房间不存在' };
     }
@@ -385,7 +470,8 @@ function handleLeaveRoom(roomId, playerId, clientId) {
         });
         
         if (room.players.length === 0) {
-            rooms.delete(roomId);
+            rooms.delete(room.id);
+            console.log(`房间 ${room.id} 已被删除（无玩家）`);
         }
     }
     
@@ -412,7 +498,7 @@ function handleStartGame(roomId, playerId) {
     }
     
     room.gameStarted = true;
-    room.currentPlayer = room.dealer; // 修复：游戏开始时设置当前玩家为庄家
+    room.currentPlayer = room.dealer;
     dealCards(room);
     
     // 通知所有玩家游戏开始
@@ -429,6 +515,8 @@ function handleStartGame(roomId, playerId) {
             hand: player.hand
         });
     });
+    
+    console.log(`游戏开始: ${roomId}, 庄家: ${room.dealer}`);
     
     return { success: true, type: 'game_started' };
 }
@@ -541,6 +629,15 @@ function handlePassTurn(roomId, playerId) {
 
 // 获取更新
 function handleGetUpdates(roomId, playerId, clientId) {
+    if (!roomId || !playerId) {
+        return { 
+            success: true, 
+            type: 'updates', 
+            messages: [],
+            roomState: null 
+        };
+    }
+    
     const room = rooms.get(roomId);
     if (!room) {
         return { success: false, error: '房间不存在' };
