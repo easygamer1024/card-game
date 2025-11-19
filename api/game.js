@@ -137,7 +137,7 @@ module.exports = async (req, res) => {
     
     try {
         // 健康检查端点
-        if (path === '/health' && method === 'GET') {
+        if ((path === '/health' || path === '/api/health') && method === 'GET') {
             const roomList = Array.from(rooms.entries()).map(([id, room]) => ({
                 id: id,
                 playerCount: room.players.length,

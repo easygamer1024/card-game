@@ -1008,13 +1008,6 @@ async function testConnection() {
         updateConnectionStatus(false);
     }
 }
-    // 在健康检查端点后添加游戏状态调试端点
-if (path === '/api/game-state' && method === 'GET') {
-    const urlParams = new URLSearchParams(url.split('?')[1]);
-    const roomId = urlParams.get('roomId');
-    }
-    return;
-}
     // 页面加载时初始化
     document.addEventListener('DOMContentLoaded', initialize);
 </script>
