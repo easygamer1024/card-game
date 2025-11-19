@@ -558,7 +558,11 @@ function handleStartGame(roomId, playerId) {
         
         console.log(`开始发牌...`);
         dealCards(room);
-        
+        room.recentPlays = []; // 初始化出牌记录
+        room.players.forEach(player => {
+            player.passed = false; // 初始化PASS状态
+        });
+
         // 通知所有玩家游戏开始
         room.players.forEach(player => {
             player.pendingMessages.push({
@@ -627,6 +631,23 @@ function handlePlayCards(roomId, playerId, cards) {
     });
     
     player.cards = player.hand.length;
+
+// 新增：记录出牌历史
+    if (!room.recentPlays) {
+        room.recentPlays = [];
+    }
+    room.recentPlays.push({
+        playerName: player.name,
+        cards: cards
+    });
+
+// 限制出牌记录数量（保留最近4条，即2轮）
+    if (room.recentPlays.length > 4) {
+        room.recentPlays = room.recentPlays.slice(-4);
+    }
+    
+    // 重置玩家的PASS状态
+    player.passed = false;
     
     // 更新游戏状态
     const play = {
@@ -679,6 +700,7 @@ function handlePassTurn(roomId, playerId) {
     }
     
     const player = room.players.find(p => p.id === playerId);
+    player.passed = true;
     
     // 切换到下一个玩家
     const currentIndex = room.players.findIndex(p => p.id === playerId);
@@ -730,21 +752,24 @@ function handleGetUpdates(roomId, playerId, clientId) {
     }
     
     return {
-        success: true,
-        type: 'updates',
-        messages: messages,
-        roomState: {
-            players: room.players.map(p => ({ 
-                id: p.id, 
-                name: p.name, 
-                cards: p.cards,
-                isCurrent: p.id === room.currentPlayer
-            })),
-            currentPlayer: room.currentPlayer,
-            gameStarted: room.gameStarted,
-            lastPlay: room.lastPlay
-        }
-    };
+    success: true,
+    type: 'updates',
+    messages: messages,
+    roomState: {
+        players: room.players.map(p => ({ 
+            id: p.id, 
+            name: p.name, 
+            cards: p.cards,
+            isCurrent: p.id === room.currentPlayer,
+            passed: p.passed || false // 添加PASS状态
+        })),
+        currentPlayer: room.currentPlayer,
+        gameStarted: room.gameStarted,
+        lastPlay: room.lastPlay,
+        drawPileCount: room.drawPile ? room.drawPile.length : 0, // 添加牌堆数量
+        recentPlays: room.recentPlays || [] // 添加最近出牌记录
+    }
+};
 }
 
 // 结束游戏

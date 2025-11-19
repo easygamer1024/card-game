@@ -253,6 +253,186 @@
             color: #666;
             font-size: 0.9em;
         }
+/* 牌桌样式 */
+.game-table {
+    background: linear-gradient(135deg, #2d5016 0%, #4a7a1f 100%);
+    border-radius: 12px;
+    padding: 15px;
+    margin: 15px 0;
+    border: 3px solid #8b4513;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.table-center {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    min-height: 120px;
+}
+
+.draw-pile {
+    text-align: center;
+    color: white;
+    cursor: pointer;
+}
+
+.pile-label {
+    font-size: 0.9em;
+    margin-bottom: 5px;
+    opacity: 0.8;
+}
+
+.pile-count {
+    font-size: 1.5em;
+    font-weight: bold;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    border: 2px solid gold;
+}
+
+.discard-area {
+    flex: 1;
+    margin-left: 20px;
+    color: white;
+}
+
+.discard-area h4 {
+    margin-bottom: 8px;
+    text-align: center;
+    color: gold;
+}
+
+.discard-history {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    min-height: 60px;
+}
+
+.discard-play {
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.discard-player {
+    font-size: 0.8em;
+    color: #333;
+    margin-bottom: 5px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.discard-cards {
+    display: flex;
+    gap: 3px;
+    justify-content: center;
+}
+
+.discard-card {
+    width: 25px;
+    height: 35px;
+    background: white;
+    border-radius: 3px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 2px;
+    font-size: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.discard-card.red {
+    color: #e74c3c;
+}
+
+.discard-card.black {
+    color: #2c3e50;
+}
+
+/* 玩家状态样式 */
+.players-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 15px 0;
+    justify-content: center;
+}
+
+.player-status {
+    background: white;
+    border-radius: 8px;
+    padding: 10px;
+    min-width: 120px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 2px solid transparent;
+    transition: all 0.3s ease;
+}
+
+.player-status.current {
+    border-color: #667eea;
+    background: #f0f4ff;
+}
+
+.player-status.passed {
+    border-color: gold;
+    background: #fff9e6;
+}
+
+.player-name {
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: #333;
+}
+
+.player-cards {
+    font-size: 0.9em;
+    color: #666;
+    margin-bottom: 5px;
+}
+
+.player-pass {
+    color: #d4af37;
+    font-weight: bold;
+    font-size: 0.8em;
+    background: gold;
+    padding: 2px 8px;
+    border-radius: 10px;
+    display: inline-block;
+}
+
+.player-turn {
+    color: #667eea;
+    font-weight: bold;
+    font-size: 0.8em;
+}
+
+/* 响应式调整 */
+@media (max-width: 480px) {
+    .table-center {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .discard-area {
+        margin-left: 0;
+        width: 100%;
+    }
+    
+    .player-status {
+        min-width: 100px;
+        padding: 8px;
+    }
+}
         
         @media (max-width: 480px) {
             body {
@@ -360,7 +540,25 @@
             <div id="gameView" class="hidden">
                 <div class="game-area">
                     <h3>游戏进行中</h3>
-                    
+                    <!-- 在这里添加牌桌状态显示 -->
+        <div class="game-table">
+            <div class="table-center">
+                <div class="draw-pile">
+                    <div class="pile-label">牌堆</div>
+                    <div class="pile-count" id="drawPileCount">54</div>
+                </div>
+                <div class="discard-area">
+                    <h4>出牌记录</h4>
+                    <div id="discardHistory" class="discard-history">
+                        <!-- 出牌历史将通过JavaScript动态生成 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+<!-- 在这里添加玩家状态显示 -->
+        <div class="players-status" id="playersStatus">
+            <!-- 玩家状态将通过JavaScript动态生成 -->
+        </div>
                     <div class="player-hand" id="playerHand">
                         <!-- 手牌将通过JavaScript动态生成 -->
                     </div>
@@ -678,7 +876,103 @@ function handlePlayerHand(data) {
     
     // 更新游戏状态 - 增强版本
 function updateGameState(roomState) {
-    console.log('更新游戏状态:', roomState);
+console.log('更新游戏状态:', roomState);
+    
+    // 保存房间状态供其他函数使用
+    window.currentRoomState = roomState;
+    
+    if (roomState && roomState.players) {
+        updatePlayersList(roomState.players);
+        updatePlayersStatus(roomState); // 新增：更新玩家状态显示
+    }
+    
+    // 更新牌桌状态
+    updateTableState(roomState); // 新增：更新牌桌状态
+     // 更新牌堆数量
+    const drawPileCount = document.getElementById('drawPileCount');
+    if (drawPileCount && roomState.drawPileCount !== undefined) {
+        drawPileCount.textContent = roomState.drawPileCount;
+    }
+    
+    // 更新玩家状态
+    updatePlayersStatus(roomState);
+    
+    // 更新出牌历史
+    if (roomState.recentPlays) {
+        updateDiscardHistory(roomState.recentPlays);
+    }
+}
+
+// 更新玩家状态显示
+function updatePlayersStatus(roomState) {
+    const playersStatus = document.getElementById('playersStatus');
+    if (!playersStatus || !roomState.players) return;
+    
+    playersStatus.innerHTML = '';
+    
+    roomState.players.forEach(player => {
+        const playerStatus = document.createElement('div');
+        const isCurrent = player.id === roomState.currentPlayer;
+        const isMe = player.id === currentPlayerId;
+        const hasPassed = player.passed || false;
+        
+        playerStatus.className = `player-status ${isCurrent ? 'current' : ''} ${hasPassed ? 'passed' : ''}`;
+        
+        let statusHTML = `
+            <div class="player-name">${player.name}${isMe ? ' (我)' : ''}</div>
+            <div class="player-cards">${player.cards} 张牌</div>
+        `;
+        
+        if (hasPassed) {
+            statusHTML += `<div class="player-pass">PASS</div>`;
+        } else if (isCurrent) {
+            statusHTML += `<div class="player-turn">当前回合</div>`;
+        }
+        
+        playerStatus.innerHTML = statusHTML;
+        playersStatus.appendChild(playerStatus);
+    });
+}
+
+// 更新出牌历史
+function updateDiscardHistory(recentPlays) {
+    const discardHistory = document.getElementById('discardHistory');
+    if (!discardHistory) return;
+    
+    discardHistory.innerHTML = '';
+    
+    if (!recentPlays || recentPlays.length === 0) {
+        discardHistory.innerHTML = '<div style="color: rgba(255,255,255,0.7); text-align: center;">暂无出牌记录</div>';
+        return;
+    }
+    
+    // 只显示最近2轮出牌
+    const displayPlays = recentPlays.slice(-2);
+    
+    displayPlays.forEach(play => {
+        const playElement = document.createElement('div');
+        playElement.className = 'discard-play';
+        
+        let cardsHTML = '';
+        if (play.cards && play.cards.length > 0) {
+            play.cards.forEach(card => {
+                cardsHTML += `
+                    <div class="discard-card ${card.color}">
+                        <div class="card-value">${card.value}</div>
+                        <div class="card-suit">${card.suit}</div>
+                    </div>
+                `;
+            });
+        }
+        
+        playElement.innerHTML = `
+            <div class="discard-player">${play.playerName}</div>
+            <div class="discard-cards">${cardsHTML}</div>
+        `;
+        
+        discardHistory.appendChild(playElement);
+    });
+}
     
     // 保存房间状态供其他函数使用
     window.currentRoomState = roomState;
@@ -892,7 +1186,26 @@ async function startGame() {
         showMessage('开始游戏错误: ' + error.message);
     }
 }
-    
+   <!-- 在游戏区域添加牌桌状态显示 -->
+<div class="game-table">
+    <div class="table-center">
+        <div class="draw-pile">
+            <div class="pile-label">牌堆</div>
+            <div class="pile-count" id="drawPileCount">54</div>
+        </div>
+        <div class="discard-area">
+            <h4>出牌记录</h4>
+            <div id="discardHistory" class="discard-history">
+                <!-- 出牌历史将通过JavaScript动态生成 -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 修改玩家列表显示，添加状态 -->
+<div class="players-status" id="playersStatus">
+    <!-- 玩家状态将通过JavaScript动态生成 -->
+</div> 
     // 出牌
     async function playCards() {
         if (selectedCards.length === 0) {
