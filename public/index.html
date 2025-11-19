@@ -746,45 +746,48 @@
         }
     }
     
-    // 加入房间 - 添加房间检查
-    async function joinRoom() {
-        const roomIdInput = document.getElementById('roomId');
-        const roomId = roomIdInput.value.trim();
-        const playerName = document.getElementById('playerName').value.trim() || '玩家';
-        
-        if (!roomId) {
-            showMessage('请输入房间号');
-            return;
-        }
-        
-        // 先检查房间是否存在
-        showMessage('正在检查房间...');
-        const roomExists = await checkRoomExists(roomId);
-        
-        if (!roomExists) {
-            showMessage('房间不存在，请检查房间号是否正确');
-            return;
-        }
-        
-        try {
-            const result = await sendRequest('join_room', { 
-                roomId: roomId, 
-                playerName: playerName 
-            });
-            handleServerMessage(result);
-        } catch (error) {
-            // 错误已在 sendRequest 中处理
-        }
+// 加入房间 - 添加房间检查
+async function joinRoom() {
+    const roomIdInput = document.getElementById('roomId');
+    const roomId = roomIdInput.value.trim();
+    const playerName = document.getElementById('playerName').value.trim() || '玩家';
+    
+    if (!roomId) {
+        showMessage('请输入房间号');
+        roomIdInput.focus();
+        return;
     }
     
-    // 开始游戏
-    async function startGame() {
-        try {
-            await sendRequest('start_game');
-        } catch (error) {
-            // 错误已在 sendRequest 中处理
-        }
+    if (roomId.length < 4) {
+        showMessage('房间号格式不正确');
+        roomIdInput.focus();
+        return;
     }
+    
+    try {
+        showMessage('正在加入房间 ' + roomId + '...');
+        
+        const result = await sendRequest('join_room', { 
+            roomId: roomId, 
+            playerName: playerName 
+        });
+        
+        if (result.success) {
+            handleServerMessage(result);
+        } else {
+            // 显示详细的错误信息
+            let errorMsg = result.error || '加入房间失败';
+            if (result.debug && result.debug.availableRooms) {
+                errorMsg += '。当前可用房间: ' + (result.debug.availableRooms.length > 0 ? 
+                    result.debug.availableRooms.join(', ') : '无');
+            }
+            showMessage(errorMsg);
+        }
+    } catch (error) {
+        showMessage('网络错误: ' + error.message);
+        console.error('加入房间错误:', error);
+    }
+}
     
     // 离开房间
     async function leaveRoom() {
@@ -844,25 +847,38 @@
     }
     
     // 初始化
-    function initialize() {
-        initializeClient();
-        
-        // 绑定事件监听器
-        document.getElementById('createRoomBtn').addEventListener('click', createRoom);
-        document.getElementById('joinRoomBtn').addEventListener('click', joinRoom);
-        document.getElementById('startGameBtn').addEventListener('click', startGame);
-        document.getElementById('leaveRoomBtn').addEventListener('click', leaveRoom);
-        document.getElementById('playCardsBtn').addEventListener('click', playCards);
-        document.getElementById('passTurnBtn').addEventListener('click', passTurn);
-        
-        // 添加触摸事件支持
-        document.addEventListener('touchstart', function() {}, {passive: true});
-        
-        showMessage('游戏已就绪，请准备好蜜雪冰城');
-        
-        // 测试服务器连接
-        testConnection();
-    }
+function initialize() {
+    initializeClient();
+    
+    // 绑定事件监听器
+    document.getElementById('createRoomBtn').addEventListener('click', createRoom);
+    document.getElementById('joinRoomBtn').addEventListener('click', joinRoom);
+    document.getElementById('startGameBtn').addEventListener('click', startGame);
+    document.getElementById('leaveRoomBtn').addEventListener('click', leaveRoom);
+    document.getElementById('playCardsBtn').addEventListener('click', playCards);
+    document.getElementById('passTurnBtn').addEventListener('click', passTurn);
+    
+    // 添加回车键支持
+    document.getElementById('roomId').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            joinRoom();
+        }
+    });
+    
+    document.getElementById('playerName').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            createRoom();
+        }
+    });
+    
+    // 添加触摸事件支持
+    document.addEventListener('touchstart', function() {}, {passive: true});
+    
+    showMessage('游戏已就绪，请输入房间号或创建新房间');
+    
+    // 测试服务器连接
+    testConnection();
+}
     
     // 测试服务器连接
     async function testConnection() {
