@@ -1008,7 +1008,42 @@ async function testConnection() {
         updateConnectionStatus(false);
     }
 }
+    // 在健康检查端点后添加游戏状态调试端点
+if (path === '/api/game-state' && method === 'GET') {
+    const urlParams = new URLSearchParams(url.split('?')[1]);
+    const roomId = urlParams.get('roomId');
     
+    if (roomId) {
+        const room = rooms.get(roomId.toUpperCase());
+        if (room) {
+            res.json({
+                exists: true,
+                roomId: room.id,
+                gameStarted: room.gameStarted,
+                players: room.players.map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    cards: p.cards,
+                    handCount: p.hand ? p.hand.length : 0,
+                    isDealer: p.id === room.dealer,
+                    isCurrent: p.id === room.currentPlayer
+                })),
+                dealer: room.dealer,
+                currentPlayer: room.currentPlayer,
+                drawPileCount: room.drawPile ? room.drawPile.length : 0,
+                discardPileCount: room.discardPile ? room.discardPile.length : 0
+            });
+        } else {
+            res.json({ 
+                exists: false,
+                availableRooms: Array.from(rooms.keys())
+            });
+        }
+    } else {
+        res.json({ error: '需要提供roomId参数' });
+    }
+    return;
+}
     // 页面加载时初始化
     document.addEventListener('DOMContentLoaded', initialize);
 </script>
