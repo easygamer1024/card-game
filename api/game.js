@@ -1,8 +1,22 @@
 const { v4: uuidv4 } = require('uuid');
 
+// 添加更详细的日志
+console.log('游戏服务器启动...');
+
 // 内存存储
 const rooms = new Map();
 const clients = new Map();
+
+// 添加全局错误处理
+process.on('uncaughtException', (error) => {
+  console.error('未捕获的异常:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('未处理的 Promise 拒绝:', reason);
+});
+
+// 其他现有代码保持不变...
 
 // 创建一副牌
 function createDeck() {

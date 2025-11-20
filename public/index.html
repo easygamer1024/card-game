@@ -1284,6 +1284,9 @@ function initialize() {
     
     // 添加重新连接按钮
     addReconnectButton();
+
+    // 启动连接监控
+    startConnectionMonitor();
 }
 
 // 添加重新连接功能
@@ -1300,26 +1303,132 @@ function addReconnectButton() {
 // 增强的连接测试
 async function testConnection() {
     try {
-        showMessage('测试服务器连接...');
-        const response = await fetch('/api/health');
-        if (response.ok) {
-            const data = await response.json();
-            console.log('服务器健康状态:', data);
-            updateConnectionStatus(true);
-            showMessage('服务器连接正常！当前有 ' + data.rooms + ' 个房间');
-            
-            // 如果有房间，显示房间列表
-            if (data.roomList && data.roomList.length > 0) {
-                showMessage('可用房间: ' + data.roomList.map(room => room.id + '(' + room.playerCount + '人)').join(', '));
+        showMessage('🔍 测试服务器连接...');
+        updateConnectionStatus(false);
+        
+        // 测试多个可能的端点
+        const endpoints = [
+            { url: '/api/health', name: 'API 健康检查' },
+            { url: '/health.json', name: '静态健康检查' },
+            { url: '/api/game', name: '游戏 API' }
+        ];
+        
+        let connected = false;
+        let serverInfo = null;
+        
+        for (let endpoint of endpoints) {
+            try {
+                console.log(`尝试连接: ${endpoint.url}`);
+                const response = await fetch(endpoint.url);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log(`✅ ${endpoint.name} 连接成功:`, data);
+                    
+                    serverInfo = data;
+                    connected = true;
+                    
+                    // 更新连接状态
+                    updateConnectionStatus(true);
+                    
+                    // 显示服务器信息
+                    let message = `✅ 服务器连接正常！`;
+                    if (data.rooms !== undefined) {
+                        message += ` 当前有 ${data.rooms} 个房间`;
+                    }
+                    if (data.status) {
+                        message += ` (${data.status})`;
+                    }
+                    
+                    showMessage(message);
+                    
+                    // 显示可用房间
+                    if (data.roomList && data.roomList.length > 0) {
+                        const roomInfo = data.roomList.map(room => 
+                            `${room.id}(${room.playerCount}人)`
+                        ).join(', ');
+                        showMessage(`🏠 可用房间: ${roomInfo}`);
+                    } else if (data.rooms === 0) {
+                        showMessage('💡 提示：暂无房间，您可以创建新房间');
+                    }
+                    
+                    break;
+                } else {
+                    console.log(`❌ ${endpoint.name} 响应异常: ${response.status}`);
+                }
+            } catch (error) {
+                console.log(`❌ ${endpoint.name} 连接失败:`, error.message);
+            }
+        }
+        
+        if (!connected) {
+            throw new Error('所有服务器端点连接失败，请检查部署状态');
+        }
+        
+        return serverInfo;
+        
+    } catch (error) {
+        console.error('连接测试完全失败:', error);
+        showMessage('❌ 服务器连接失败: ' + error.message);
+        showMessage('💡 可能的原因:');
+        showMessage('  1. 服务器正在部署中');
+        showMessage('  2. API 路由配置错误');
+        showMessage('  3. 网络连接问题');
+        updateConnectionStatus(false);
+        return null;
+    }
+}
+
+// 增强的连接状态更新
+function updateConnectionStatus(connected) {
+    const connectionStatus = document.getElementById('connectionStatus');
+    if (connected) {
+        connectionStatus.className = 'connection-status connected';
+        connectionStatus.innerHTML = '<div class="status-dot"></div><span>✅ 已连接到服务器</span>';
+    } else {
+        connectionStatus.className = 'connection-status disconnected';
+        connectionStatus.innerHTML = '<div class="status-dot"></div><span>❌ 连接断开 - 点击重试</span>';
+    }
+}
+
+// 增强的重新连接功能
+function addReconnectButton() {
+    const connectionStatus = document.getElementById('connectionStatus');
+    connectionStatus.style.cursor = 'pointer';
+    connectionStatus.title = '点击重新测试连接';
+    connectionStatus.addEventListener('click', async function() {
+        showMessage('🔄 重新连接中...');
+        await testConnection();
+    });
+}
+
+// 定期检查连接状态
+function startConnectionMonitor() {
+    // 每30秒检查一次连接状态
+    setInterval(async () => {
+        if (currentRoomId) {
+            // 如果在房间中，通过轮询检查连接
+            try {
+                await pollUpdates();
+                updateConnectionStatus(true);
+            } catch (error) {
+                console.log('定期检查连接失败:', error);
+                updateConnectionStatus(false);
             }
         } else {
-            throw new Error('服务器响应异常');
+            // 如果不在房间中，简单检查服务器是否可访问
+            try {
+                const response = await fetch('/health.json');
+                if (response.ok) {
+                    updateConnectionStatus(true);
+                } else {
+                    updateConnectionStatus(false);
+                }
+            } catch (error) {
+                updateConnectionStatus(false);
+            }
         }
-    } catch (error) {
-        console.error('连接测试失败:', error);
-        showMessage('服务器连接失败: ' + error.message);
-        updateConnectionStatus(false);
-    }
+    }, 30000);
 }
     // 页面加载时初始化
     document.addEventListener('DOMContentLoaded', initialize);

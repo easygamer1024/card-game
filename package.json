@@ -4,7 +4,9 @@
   "description": "干瞪眼儿纸牌游戏 - 修复版",
   "main": "api/game.js",
   "scripts": {
-    "dev": "node api/game.js"
+    "dev": "node api/game.js",
+    "build": "node build.js",
+    "vercel-build": "npm run build"
   },
   "dependencies": {
     "uuid": "^9.0.0"
