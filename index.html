@@ -1037,6 +1037,7 @@ function updateDiscardHistory(recentPlays) {
             lastMyTurnMessage = now;
         }
     }
+｝
     
     // 渲染玩家手牌
     function renderPlayerHand() {
@@ -1246,26 +1247,7 @@ async function startGame() {
         showMessage('开始游戏错误: ' + error.message);
     }
 }
-   <!-- 在游戏区域添加牌桌状态显示 -->
-    <div class="game-table">
-    <div class="table-center">
-        <div class="draw-pile">
-            <div class="pile-label">牌堆</div>
-            <div class="pile-count" id="drawPileCount">54</div>
-        </div>
-        <div class="discard-area">
-            <h4>出牌记录</h4>
-            <div id="discardHistory" class="discard-history">
-                <!-- 出牌历史将通过JavaScript动态生成 -->
-            </div>
-        </div>
-    </div>
-</div>
 
-<!-- 修改玩家列表显示，添加状态 -->
-<div class="players-status" id="playersStatus">
-    <!-- 玩家状态将通过JavaScript动态生成 -->
-</div> 
     // 出牌
     async function playCards() {
         if (selectedCards.length === 0) {
