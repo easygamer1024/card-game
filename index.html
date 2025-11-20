@@ -9,6 +9,7 @@
     <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgdmlld0JveD0iMCAwIDE5MiAxOTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiByeD0iMjQiIGZpbGw9IiM2NjdlZWEiLz4KPHN2ZyB4PSI0OCIgeT0iNDgiIHdpZHRoPSI5NiIgaGVpZ2h0PSI5NiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiPgo8cGF0aCBkPSJNMTIgMkwyIDEySDEyVjJaIi8+CjxwYXRoIGQ9Ik0xMiAyTDIyIDEySDEyVjJaIi8+CjxwYXRoIGQ9Ik0yMiAxMkwyIDEyIi8+CjxwYXRoIGQ9Ik0xMiAxMkwyMiAyMiIvPgo8cGF0aCBkPSJNMTIgMTJMMiAyMiIvPgo8L3N2Zz4KPC9zdmc+">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>干瞪眼儿</title>
@@ -1105,13 +1106,15 @@ function updateConnectionStatus(connected) {
         connectionStatus.innerHTML = '<div class="status-dot"></div><span>✅ 已连接到服务器</span>';
     } else {
         connectionStatus.className = 'connection-status disconnected';
-        connectionStatus.innerHTML = '<div class="status-dot"></div><span>❌ 连接断开 - 点击重试</span>';
+        connectionStatus.innerHTML = '<div class="status-dot"></div><span>连接断开 - 点击重试</span>';
     }
 }
 
 // 增强的连接测试
 async function testConnection() {
     try {
+        console.log('开始连接测试...');
+        
         const response = await fetch('/api/game', {
             method: 'POST',
             headers: {
@@ -1124,17 +1127,22 @@ async function testConnection() {
             })
         });
         
+        console.log('响应状态:', response.status);
+        console.log('响应OK:', response.ok);
+        
         if (response.ok) {
             const data = await response.json();
+            console.log('响应数据:', data);
             updateConnectionStatus(true);
-            showMessage('✅ 服务器连接正常！');
+            showMessage('服务器连接正常！');
         } else {
-            throw new Error('服务器响应异常');
+            console.error('响应异常:', response.status, response.statusText);
+            throw new Error(`服务器响应异常: ${response.status}`);
         }
     } catch (error) {
         console.error('连接测试失败:', error);
         updateConnectionStatus(false);
-        showMessage('❌ 服务器连接失败');
+        showMessage('服务器连接失败: ' + error.message);
     }
 }
     
