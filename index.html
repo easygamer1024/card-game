@@ -1100,42 +1100,6 @@ function updateConnectionStatus(connected) {
         connectionStatus.innerHTML = '<div class="status-dot"></div><span>连接断开 - 点击重试</span>';
     }
 }
-
-// 增强的连接测试
-async function testConnection() {
-    try {
-        console.log('开始连接测试...');
-        
-        const response = await fetch('/api/game', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                action: 'check_room',
-                roomId: 'test',
-                clientId: clientId
-            })
-        });
-        
-        console.log('响应状态:', response.status);
-        console.log('响应OK:', response.ok);
-        
-        if (response.ok) {
-            const data = await response.json();
-            console.log('响应数据:', data);
-            updateConnectionStatus(true);
-            showMessage('服务器连接正常！');
-        } else {
-            console.error('响应异常:', response.status, response.statusText);
-            throw new Error(`服务器响应异常: ${response.status}`);
-        }
-    } catch (error) {
-        console.error('连接测试失败:', error);
-        updateConnectionStatus(false);
-        showMessage('服务器连接失败: ' + error.message);
-    }
-}
     
     // 创建房间
     async function createRoom() {
@@ -1281,17 +1245,6 @@ async function startGame() {
         
         updateConnectionStatus(true);
     }
-
-// 添加重新连接功能
-function addReconnectButton() {
-    const connectionStatus = document.getElementById('connectionStatus');
-    connectionStatus.style.cursor = 'pointer';
-    connectionStatus.title = '点击重新连接';
-    connectionStatus.addEventListener('click', function() {
-        showMessage('重新连接中...');
-        testConnection();
-    });
-}
 
 // 增强的连接测试
 async function testConnection() {
