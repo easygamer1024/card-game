@@ -4,16 +4,10 @@
   "description": "干瞪眼儿纸牌游戏 - 蜜雪冰城在线版",
   "main": "api/game.js",
   "scripts": {
-    "dev": "node api/game.js",
-    "build": "node build.js",
-    "start": "node api/game.js",
-    "vercel-build": "npm run build"
+    "dev": "node api/game.js"
   },
   "dependencies": {
     "uuid": "^9.0.0"
-  },
-  "devDependencies": {
-    "@vercel/node": "^2.0.0"
   },
   "engines": {
     "node": ">=18.0.0"
