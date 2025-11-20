@@ -1308,50 +1308,42 @@ async function testConnection() {
         
         // 测试多个可能的端点
         const endpoints = [
-            { url: '/api/health', name: 'API 健康检查' },
             { url: '/health.json', name: '静态健康检查' },
-            { url: '/api/game', name: '游戏 API' }
+            { url: '/api/health', name: 'API 健康检查' },
+            { url: '/api/game', name: '游戏 API', method: 'POST', data: { action: 'check_room', roomId: 'test' } }
         ];
         
         let connected = false;
-        let serverInfo = null;
         
         for (let endpoint of endpoints) {
             try {
                 console.log(`尝试连接: ${endpoint.url}`);
-                const response = await fetch(endpoint.url);
+                let response;
+                
+                if (endpoint.method === 'POST') {
+                    response = await fetch(endpoint.url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(endpoint.data || {})
+                    });
+                } else {
+                    response = await fetch(endpoint.url);
+                }
                 
                 if (response.ok) {
                     const data = await response.json();
                     console.log(`✅ ${endpoint.name} 连接成功:`, data);
                     
-                    serverInfo = data;
                     connected = true;
-                    
-                    // 更新连接状态
                     updateConnectionStatus(true);
                     
-                    // 显示服务器信息
                     let message = `✅ 服务器连接正常！`;
                     if (data.rooms !== undefined) {
                         message += ` 当前有 ${data.rooms} 个房间`;
                     }
-                    if (data.status) {
-                        message += ` (${data.status})`;
-                    }
-                    
                     showMessage(message);
-                    
-                    // 显示可用房间
-                    if (data.roomList && data.roomList.length > 0) {
-                        const roomInfo = data.roomList.map(room => 
-                            `${room.id}(${room.playerCount}人)`
-                        ).join(', ');
-                        showMessage(`🏠 可用房间: ${roomInfo}`);
-                    } else if (data.rooms === 0) {
-                        showMessage('💡 提示：暂无房间，您可以创建新房间');
-                    }
-                    
                     break;
                 } else {
                     console.log(`❌ ${endpoint.name} 响应异常: ${response.status}`);
@@ -1362,20 +1354,16 @@ async function testConnection() {
         }
         
         if (!connected) {
-            throw new Error('所有服务器端点连接失败，请检查部署状态');
+            throw new Error('所有服务器端点连接失败');
         }
-        
-        return serverInfo;
         
     } catch (error) {
         console.error('连接测试完全失败:', error);
-        showMessage('❌ 服务器连接失败: ' + error.message);
+        showMessage('❌ 服务器连接失败');
         showMessage('💡 可能的原因:');
-        showMessage('  1. 服务器正在部署中');
-        showMessage('  2. API 路由配置错误');
-        showMessage('  3. 网络连接问题');
+        showMessage('  1. API 服务器启动中');
+        showMessage('  2. 网络延迟，请稍后重试');
         updateConnectionStatus(false);
-        return null;
     }
 }
 

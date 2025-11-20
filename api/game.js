@@ -1,7 +1,9 @@
 const { v4: uuidv4 } = require('uuid');
 
-// 添加更详细的日志
-console.log('游戏服务器启动...');
+// 添加详细的启动日志
+console.log('=== 游戏服务器启动 ===');
+console.log('环境变量:', process.env.NODE_ENV);
+console.log('当前时间:', new Date().toISOString());
 
 // 内存存储
 const rooms = new Map();
@@ -15,8 +17,6 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('未处理的 Promise 拒绝:', reason);
 });
-
-// 其他现有代码保持不变...
 
 // 创建一副牌
 function createDeck() {
@@ -133,230 +133,6 @@ function cleanupExpiredData() {
     
     console.log(`清理后: ${rooms.size} 个房间, ${clients.size} 个客户端`);
 }
-
-// 主处理函数
-module.exports = async (req, res) => {
-// 在 module.exports 函数开头添加
-if (req.url === '/health' || req.url === '/api/health') {
-  res.setHeader('Content-Type', 'application/json');
-  res.end(JSON.stringify({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    rooms: rooms.size,
-    clients: clients.size
-  }));
-  return;
-}
-    // 设置 CORS 头
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    
-    if (req.method === 'OPTIONS') {
-        res.status(200).end();
-        return;
-    }
-    
-    const { method, url } = req;
-    const path = url.split('?')[0];
-    
-    try {
-        // 健康检查端点
-        if ((path === '/health' || path === '/api/health') && method === 'GET') {
-            const roomList = Array.from(rooms.entries()).map(([id, room]) => ({
-                id: id,
-                playerCount: room.players.length,
-                gameStarted: room.gameStarted,
-                createdAt: room.createdAt,
-                players: room.players.map(p => p.name)
-            }));
-            
-            res.json({ 
-                status: 'ok', 
-                rooms: rooms.size,
-                clients: clients.size,
-                roomList: roomList,
-                timestamp: new Date().toISOString()
-            });
-            return;
-        }
-        
-        // 调试端点：查看所有房间详情
-        if (path === '/debug' && method === 'GET') {
-            const debugInfo = {
-                totalRooms: rooms.size,
-                totalClients: clients.size,
-                rooms: Array.from(rooms.entries()).map(([id, room]) => ({
-                    id: id,
-                    playerCount: room.players.length,
-                    gameStarted: room.gameStarted,
-                    createdAt: new Date(room.createdAt).toISOString(),
-                    players: room.players.map(p => ({
-                        id: p.id,
-                        name: p.name,
-                        cards: p.cards
-                    })),
-                    currentPlayer: room.currentPlayer,
-                    dealer: room.dealer
-                })),
-                timestamp: new Date().toISOString()
-            };
-            
-            res.json(debugInfo);
-            return;
-        }
-        
-        // 房间信息端点
-        if (path === '/rooms' && method === 'GET') {
-            const roomInfo = Array.from(rooms.entries()).map(([id, room]) => ({
-                id: id,
-                playerCount: room.players.length,
-                gameStarted: room.gameStarted,
-                players: room.players.map(p => p.name)
-            }));
-            res.json(roomInfo);
-            return;
-        }
-        
-        // 调试端点：查看特定房间
-        if (path.startsWith('/api/room/') && method === 'GET') {
-            const roomId = path.split('/').pop().toUpperCase();
-            const room = rooms.get(roomId);
-            if (room) {
-                res.json({
-                    exists: true,
-                    roomId: room.id,
-                    playerCount: room.players.length,
-                    gameStarted: room.gameStarted,
-                    players: room.players.map(p => ({ id: p.id, name: p.name })),
-                    createdAt: room.createdAt
-                });
-            } else {
-                res.json({ 
-                    exists: false,
-                    availableRooms: Array.from(rooms.keys())
-                });
-            }
-            return;
-        }
-        
-        // 游戏API端点
-        if (path === '/api/game') {
-            let body = {};
-            
-            if (method === 'POST') {
-                // 解析请求体
-                body = await new Promise((resolve, reject) => {
-                    let data = '';
-                    req.on('data', chunk => data += chunk);
-                    req.on('end', () => {
-                        try {
-                            resolve(data ? JSON.parse(data) : {});
-                        } catch (e) {
-                            reject(new Error('无效的JSON数据'));
-                        }
-                    });
-                });
-            } else if (method === 'GET') {
-                // 处理 GET 请求（用于轮询）
-                const urlParams = new URLSearchParams(url.split('?')[1]);
-                body = {
-                    action: 'get_updates',
-                    clientId: urlParams.get('clientId'),
-                    roomId: urlParams.get('roomId'),
-                    playerId: urlParams.get('playerId')
-                };
-            } else {
-                res.status(405).json({ error: '方法不允许' });
-                return;
-            }
-            
-            // 新的参数提取方式
-const { action, clientId, ...requestBody } = body;
-
-// 根据action提取不同的参数
-let roomId, playerId;
-
-// 对于需要roomId和playerId的action，从requestBody中提取
-if (action !== 'create_room' && action !== 'join_room' && action !== 'check_room') {
-    roomId = requestBody.roomId;
-    playerId = requestBody.playerId;
-}
-            
-            // 添加详细的调试日志
-            console.log(`处理请求: ${method} ${path}, 房间: ${roomId}, 玩家: ${playerId}, 动作: ${action}`);
-            
-            // 验证客户端
-            if (clientId) {
-                if (!clients.has(clientId)) {
-                    clients.set(clientId, {
-                        id: clientId,
-                        lastSeen: Date.now(),
-                        pendingMessages: []
-                    });
-                } else {
-                    clients.get(clientId).lastSeen = Date.now();
-                }
-            }
-            
-            let result;
-
-// 修改switch语句，直接使用requestBody
-switch (action) {
-    case 'create_room':
-        result = handleCreateRoom(requestBody.playerName, clientId);
-        break;
-    case 'join_room':
-        // 确保这里使用requestBody中的参数
-        result = handleJoinRoom(requestBody.roomId, requestBody.playerName, clientId);
-        break;
-    case 'leave_room':
-        result = handleLeaveRoom(roomId, playerId, clientId);
-        break;
-    case 'start_game':
-        result = handleStartGame(roomId, playerId);
-        break;
-    case 'play_cards':
-        result = handlePlayCards(roomId, playerId, requestBody.cards);
-        break;
-    case 'pass_turn':
-        result = handlePassTurn(roomId, playerId);
-        break;
-    case 'get_updates':
-        result = handleGetUpdates(roomId, playerId, clientId);
-        break;
-    case 'check_room':
-        result = handleCheckRoom(requestBody.roomId);
-        break;
-    default:
-        res.status(400).json({ error: '未知的操作', action: action });
-        return;
-}
-            
-            // 清理过期数据（每10次请求清理一次，减少性能影响）
-            if (Math.random() < 0.1) {
-                cleanupExpiredData();
-            }
-            
-            res.json(result);
-            return;
-        }
-        
-        // 默认响应
-        res.json({ 
-            message: '干瞪眼儿游戏服务器 API',
-            endpoints: ['/health', '/debug', '/rooms', '/api/game', '/api/room/:id'],
-            timestamp: new Date().toISOString()
-        });
-        
-    } catch (error) {
-        console.error('服务器错误:', error);
-        res.status(500).json({ 
-            error: '服务器内部错误',
-            message: error.message 
-        });
-    }
-};
 
 // 检查房间是否存在
 function handleCheckRoom(roomId) {
@@ -657,7 +433,7 @@ function handlePlayCards(roomId, playerId, cards) {
     
     player.cards = player.hand.length;
 
-// 新增：记录出牌历史
+    // 新增：记录出牌历史
     if (!room.recentPlays) {
         room.recentPlays = [];
     }
@@ -666,7 +442,7 @@ function handlePlayCards(roomId, playerId, cards) {
         cards: cards
     });
 
-// 限制出牌记录数量（保留最近4条，即2轮）
+    // 限制出牌记录数量（保留最近4条，即2轮）
     if (room.recentPlays.length > 4) {
         room.recentPlays = room.recentPlays.slice(-4);
     }
@@ -777,24 +553,24 @@ function handleGetUpdates(roomId, playerId, clientId) {
     }
     
     return {
-    success: true,
-    type: 'updates',
-    messages: messages,
-    roomState: {
-        players: room.players.map(p => ({ 
-            id: p.id, 
-            name: p.name, 
-            cards: p.cards,
-            isCurrent: p.id === room.currentPlayer,
-            passed: p.passed || false // 添加PASS状态
-        })),
-        currentPlayer: room.currentPlayer,
-        gameStarted: room.gameStarted,
-        lastPlay: room.lastPlay,
-        drawPileCount: room.drawPile ? room.drawPile.length : 0, // 添加牌堆数量
-        recentPlays: room.recentPlays || [] // 添加最近出牌记录
-    }
-};
+        success: true,
+        type: 'updates',
+        messages: messages,
+        roomState: {
+            players: room.players.map(p => ({ 
+                id: p.id, 
+                name: p.name, 
+                cards: p.cards,
+                isCurrent: p.id === room.currentPlayer,
+                passed: p.passed || false
+            })),
+            currentPlayer: room.currentPlayer,
+            gameStarted: room.gameStarted,
+            lastPlay: room.lastPlay,
+            drawPileCount: room.drawPile ? room.drawPile.length : 0,
+            recentPlays: room.recentPlays || []
+        }
+    };
 }
 
 // 结束游戏
@@ -822,3 +598,221 @@ function endGame(room, winner) {
     room.currentPlay = null;
     room.lastPlay = null;
 }
+
+// 主处理函数
+module.exports = async (req, res) => {
+    console.log('=== 收到请求 ===');
+    console.log('方法:', req.method);
+    console.log('URL:', req.url);
+    console.log('路径:', req.url.split('?')[0]);
+    
+    // 设置 CORS 头
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    if (req.method === 'OPTIONS') {
+        console.log('处理 OPTIONS 预检请求');
+        res.status(200).end();
+        return;
+    }
+    
+    const { method, url } = req;
+    const path = url.split('?')[0];
+    
+    try {
+        // 健康检查端点
+        if ((path === '/health' || path === '/api/health') && method === 'GET') {
+            const roomList = Array.from(rooms.entries()).map(([id, room]) => ({
+                id: id,
+                playerCount: room.players.length,
+                gameStarted: room.gameStarted,
+                createdAt: room.createdAt,
+                players: room.players.map(p => p.name)
+            }));
+            
+            res.json({ 
+                status: 'ok', 
+                rooms: rooms.size,
+                clients: clients.size,
+                roomList: roomList,
+                timestamp: new Date().toISOString()
+            });
+            return;
+        }
+        
+        // 调试端点：查看所有房间详情
+        if (path === '/debug' && method === 'GET') {
+            const debugInfo = {
+                totalRooms: rooms.size,
+                totalClients: clients.size,
+                rooms: Array.from(rooms.entries()).map(([id, room]) => ({
+                    id: id,
+                    playerCount: room.players.length,
+                    gameStarted: room.gameStarted,
+                    createdAt: new Date(room.createdAt).toISOString(),
+                    players: room.players.map(p => ({
+                        id: p.id,
+                        name: p.name,
+                        cards: p.cards
+                    })),
+                    currentPlayer: room.currentPlayer,
+                    dealer: room.dealer
+                })),
+                timestamp: new Date().toISOString()
+            };
+            
+            res.json(debugInfo);
+            return;
+        }
+        
+        // 房间信息端点
+        if (path === '/rooms' && method === 'GET') {
+            const roomInfo = Array.from(rooms.entries()).map(([id, room]) => ({
+                id: id,
+                playerCount: room.players.length,
+                gameStarted: room.gameStarted,
+                players: room.players.map(p => p.name)
+            }));
+            res.json(roomInfo);
+            return;
+        }
+        
+        // 调试端点：查看特定房间
+        if (path.startsWith('/api/room/') && method === 'GET') {
+            const roomId = path.split('/').pop().toUpperCase();
+            const room = rooms.get(roomId);
+            if (room) {
+                res.json({
+                    exists: true,
+                    roomId: room.id,
+                    playerCount: room.players.length,
+                    gameStarted: room.gameStarted,
+                    players: room.players.map(p => ({ id: p.id, name: p.name })),
+                    createdAt: room.createdAt
+                });
+            } else {
+                res.json({ 
+                    exists: false,
+                    availableRooms: Array.from(rooms.keys())
+                });
+            }
+            return;
+        }
+        
+        // 游戏API端点
+        if (path === '/api/game') {
+            let body = {};
+            
+            if (method === 'POST') {
+                // 解析请求体
+                body = await new Promise((resolve, reject) => {
+                    let data = '';
+                    req.on('data', chunk => data += chunk);
+                    req.on('end', () => {
+                        try {
+                            resolve(data ? JSON.parse(data) : {});
+                        } catch (e) {
+                            reject(new Error('无效的JSON数据'));
+                        }
+                    });
+                });
+            } else if (method === 'GET') {
+                // 处理 GET 请求（用于轮询）
+                const urlParams = new URLSearchParams(url.split('?')[1]);
+                body = {
+                    action: 'get_updates',
+                    clientId: urlParams.get('clientId'),
+                    roomId: urlParams.get('roomId'),
+                    playerId: urlParams.get('playerId')
+                };
+            } else {
+                res.status(405).json({ error: '方法不允许' });
+                return;
+            }
+            
+            // 新的参数提取方式
+            const { action, clientId, ...requestBody } = body;
+
+            // 根据action提取不同的参数
+            let roomId, playerId;
+
+            // 对于需要roomId和playerId的action，从requestBody中提取
+            if (action !== 'create_room' && action !== 'join_room' && action !== 'check_room') {
+                roomId = requestBody.roomId;
+                playerId = requestBody.playerId;
+            }
+            
+            // 添加详细的调试日志
+            console.log(`处理请求: ${method} ${path}, 房间: ${roomId}, 玩家: ${playerId}, 动作: ${action}`);
+            
+            // 验证客户端
+            if (clientId) {
+                if (!clients.has(clientId)) {
+                    clients.set(clientId, {
+                        id: clientId,
+                        lastSeen: Date.now(),
+                        pendingMessages: []
+                    });
+                } else {
+                    clients.get(clientId).lastSeen = Date.now();
+                }
+            }
+            
+            let result;
+
+            // 修改switch语句，直接使用requestBody
+            switch (action) {
+                case 'create_room':
+                    result = handleCreateRoom(requestBody.playerName, clientId);
+                    break;
+                case 'join_room':
+                    result = handleJoinRoom(requestBody.roomId, requestBody.playerName, clientId);
+                    break;
+                case 'leave_room':
+                    result = handleLeaveRoom(roomId, playerId, clientId);
+                    break;
+                case 'start_game':
+                    result = handleStartGame(roomId, playerId);
+                    break;
+                case 'play_cards':
+                    result = handlePlayCards(roomId, playerId, requestBody.cards);
+                    break;
+                case 'pass_turn':
+                    result = handlePassTurn(roomId, playerId);
+                    break;
+                case 'get_updates':
+                    result = handleGetUpdates(roomId, playerId, clientId);
+                    break;
+                case 'check_room':
+                    result = handleCheckRoom(requestBody.roomId);
+                    break;
+                default:
+                    res.status(400).json({ error: '未知的操作', action: action });
+                    return;
+            }
+            
+            // 清理过期数据（每10次请求清理一次，减少性能影响）
+            if (Math.random() < 0.1) {
+                cleanupExpiredData();
+            }
+            
+            res.json(result);
+            return;
+        }
+        
+        // 默认响应
+        res.json({ 
+            message: '干瞪眼儿游戏服务器 API',
+            endpoints: ['/health', '/debug', '/rooms', '/api/game', '/api/room/:id'],
+            timestamp: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        console.error('服务器错误:', error);
+        res.status(500).json({ 
+            error: '服务器内部错误',
+            message: error.message 
+        });
+    }
+};
