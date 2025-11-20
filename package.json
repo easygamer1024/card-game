@@ -1,7 +1,7 @@
 {
-  "name": "card-game",
+  "name": "gan-deng-yan-card-game",
   "version": "1.0.0",
-  "description": "干瞪眼儿纸牌游戏 - 修复版",
+  "description": "干瞪眼儿纸牌游戏 - 蜜雪冰城在线版",
   "main": "api/game.js",
   "scripts": {
     "dev": "node api/game.js",

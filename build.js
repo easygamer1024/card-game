@@ -22,6 +22,7 @@ if (!fs.existsSync('public')) {
 const filesToCopy = [
   { source: 'index.html', dest: 'index.html' },
   { source: 'manifest.json', dest: 'manifest.json' }
+  { source: 'health.json', dest: 'health.json' } 
 ];
 
 // 复制文件到 public 目录
