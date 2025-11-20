@@ -21,8 +21,8 @@ if (!fs.existsSync('public')) {
 // 要复制的文件列表
 const filesToCopy = [
   { source: 'index.html', dest: 'index.html' },
-  { source: 'manifest.json', dest: 'manifest.json' }
-  { source: 'health.json', dest: 'health.json' } 
+  { source: 'manifest.json', dest: 'manifest.json' },
+  { source: 'health.json', dest: 'health.json' }
 ];
 
 // 复制文件到 public 目录
@@ -65,7 +65,7 @@ console.log('1. 运行: npm run build');
 console.log('2. 部署到 Vercel: vercel --prod');
 console.log('3. 访问您的应用 URL');
 
-// 添加到 build.js 文件末尾
+// 构建验证
 console.log('\n构建验证:');
 try {
   const publicFiles = fs.readdirSync(path.join(__dirname, 'public'));
