@@ -903,14 +903,6 @@ function handlePlayerHand(data) {
 function updateGameState(roomState) {
 console.log('更新游戏状态:', roomState);
     
-    // 保存房间状态供其他函数使用
-    window.currentRoomState = roomState;
-    
-    if (roomState && roomState.players) {
-        updatePlayersList(roomState.players);
-        updatePlayersStatus(roomState); // 新增：更新玩家状态显示
-    }
-    
     // 更新牌桌状态
     updateTableState(roomState); // 新增：更新牌桌状态
      // 更新牌堆数量
