@@ -3,7 +3,10 @@
   "builds": [
     {
       "src": "api/game.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
     },
     {
       "src": "package.json",
@@ -19,10 +22,5 @@
       "src": "/(.*)",
       "dest": "/public/$1"
     }
-  ],
-  "functions": {
-    "api/game.js": {
-      "maxDuration": 30
-    }
-  }
+  ]
 }
