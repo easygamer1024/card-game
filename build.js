@@ -63,3 +63,30 @@ console.log('部署说明:');
 console.log('1. 运行: npm run build');
 console.log('2. 部署到 Vercel: vercel --prod');
 console.log('3. 访问您的应用 URL');
+
+// 添加到 build.js 文件末尾
+console.log('\n构建验证:');
+try {
+  const publicFiles = fs.readdirSync(path.join(__dirname, 'public'));
+  console.log('✅ Public 目录文件列表:');
+  publicFiles.forEach(file => {
+    const filePath = path.join(__dirname, 'public', file);
+    const stats = fs.statSync(filePath);
+    console.log(`   📄 ${file} (${stats.size} bytes)`);
+  });
+  
+  // 验证关键文件是否存在
+  const requiredFiles = ['index.html', 'manifest.json', 'health.json'];
+  const missingFiles = requiredFiles.filter(file => !publicFiles.includes(file));
+  
+  if (missingFiles.length === 0) {
+    console.log('✅ 所有必需文件都已正确构建');
+    console.log('✅ 构建成功完成！');
+  } else {
+    console.error('❌ 缺失文件:', missingFiles);
+    process.exit(1);
+  }
+} catch (error) {
+  console.error('❌ 构建验证失败:', error);
+  process.exit(1);
+}

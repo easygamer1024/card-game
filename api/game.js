@@ -136,6 +136,17 @@ function cleanupExpiredData() {
 
 // 主处理函数
 module.exports = async (req, res) => {
+// 在 module.exports 函数开头添加
+if (req.url === '/health' || req.url === '/api/health') {
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    rooms: rooms.size,
+    clients: clients.size
+  }));
+  return;
+}
     // 设置 CORS 头
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
