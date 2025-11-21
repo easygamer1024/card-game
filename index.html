@@ -643,7 +643,6 @@ async function sendRequest(action, data = {}) {
         clientId: clientId,
         ...data  
     };
-// 将传入的数据展开，这样roomId和playerName会正确传递
     
     // 只有在已有房间和玩家ID时才添加这些参数
     if (currentRoomId) {
@@ -656,13 +655,20 @@ async function sendRequest(action, data = {}) {
     try {
         console.log('发送请求:', action, '数据:', requestData);
         
+        // 添加超时控制
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒超时
+        
         const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(requestData)
+            body: JSON.stringify(requestData),
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
         
         if (!response.ok) {
             throw new Error(`HTTP错误: ${response.status}`);
@@ -678,7 +684,15 @@ async function sendRequest(action, data = {}) {
         return result;
     } catch (error) {
         console.error('请求错误:', error);
-        showMessage('错误: ' + error.message);
+        
+        let errorMessage = '错误: ';
+        if (error.name === 'AbortError') {
+            errorMessage += '请求超时，请重试';
+        } else {
+            errorMessage += error.message;
+        }
+        
+        showMessage(errorMessage);
         updateConnectionStatus(false);
         throw error;
     }
@@ -900,21 +914,94 @@ function handlePlayerHand(data) {
             playersList.appendChild(playerItem);
         });
     }
-// 更新游戏状态 - 增强版本
-function updateGameState(roomState) {
-    console.log('更新游戏状态:', roomState);
-    
 // 更新牌桌状态
 function updateTableState(roomState) {
     // 这里可以添加牌桌的视觉更新逻辑
     console.log('更新牌桌状态:', roomState);
-}
     
     // 更新牌堆数量
     const drawPileCount = document.getElementById('drawPileCount');
     if (drawPileCount && roomState.drawPileCount !== undefined) {
         drawPileCount.textContent = roomState.drawPileCount;
     }
+}
+
+// 更新玩家状态显示
+function updatePlayersStatus(roomState) {
+    const playersStatus = document.getElementById('playersStatus');
+    if (!playersStatus || !roomState.players) return;
+    
+    playersStatus.innerHTML = '';
+    
+    roomState.players.forEach(player => {
+        const playerStatus = document.createElement('div');
+        const isCurrent = player.id === roomState.currentPlayer;
+        const isMe = player.id === currentPlayerId;
+        const hasPassed = player.passed || false;
+        
+        playerStatus.className = `player-status ${isCurrent ? 'current' : ''} ${hasPassed ? 'passed' : ''}`;
+        
+        let statusHTML = `
+            <div class="player-name">${player.name}${isMe ? ' (我)' : ''}</div>
+            <div class="player-cards">${player.cards} 张牌</div>
+        `;
+        
+        if (hasPassed) {
+            statusHTML += `<div class="player-pass">PASS</div>`;
+        } else if (isCurrent) {
+            statusHTML += `<div class="player-turn">当前回合</div>`;
+        }
+        
+        playerStatus.innerHTML = statusHTML;
+        playersStatus.appendChild(playerStatus);
+    });
+}
+
+// 更新出牌历史
+function updateDiscardHistory(recentPlays) {
+    const discardHistory = document.getElementById('discardHistory');
+    if (!discardHistory) return;
+    
+    discardHistory.innerHTML = '';
+    
+    if (!recentPlays || recentPlays.length === 0) {
+        discardHistory.innerHTML = '<div style="color: rgba(255,255,255,0.7); text-align: center;">暂无出牌记录</div>';
+        return;
+    }
+    
+    // 只显示最近2轮出牌
+    const displayPlays = recentPlays.slice(-2);
+    
+    displayPlays.forEach(play => {
+        const playElement = document.createElement('div');
+        playElement.className = 'discard-play';
+        
+        let cardsHTML = '';
+        if (play.cards && play.cards.length > 0) {
+            play.cards.forEach(card => {
+                cardsHTML += `
+                    <div class="discard-card ${card.color}">
+                        <div class="card-value">${card.value}</div>
+                        <div class="card-suit">${card.suit}</div>
+                    </div>
+                `;
+            });
+        }
+        
+        playElement.innerHTML = `
+            <div class="discard-player">${play.playerName}</div>
+            <div class="discard-cards">${cardsHTML}</div>
+        `;
+        
+        discardHistory.appendChild(playElement);
+    });
+}
+// 更新游戏状态 - 增强版本
+function updateGameState(roomState) {
+    console.log('更新游戏状态:', roomState);
+    
+    // 更新牌桌状态
+    updateTableState(roomState);
     
     // 更新玩家状态
     updatePlayersStatus(roomState);
@@ -936,8 +1023,10 @@ function updateTableState(roomState) {
     const playCardsBtn = document.getElementById('playCardsBtn');
     const passTurnBtn = document.getElementById('passTurnBtn');
     
-    playCardsBtn.disabled = !isMyTurn || selectedCards.length === 0;
-    passTurnBtn.disabled = !isMyTurn;
+    if (playCardsBtn && passTurnBtn) {
+        playCardsBtn.disabled = !isMyTurn || selectedCards.length === 0;
+        passTurnBtn.disabled = !isMyTurn;
+    }
     
     // 更新开始游戏按钮状态（在房间视图中）
     const startGameBtn = document.getElementById('startGameBtn');
