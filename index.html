@@ -670,7 +670,11 @@ async function sendRequest(action, data = {}) {
         
         clearTimeout(timeoutId);
         
-        if (!response.ok) {
+if (!response.ok) {
+            // 处理特定的 HTTP 错误
+            if (response.status === 502 || response.status === 504) {
+                throw new Error('服务器暂时不可用，请稍后重试');
+            }
             throw new Error(`HTTP错误: ${response.status}`);
         }
         
@@ -678,6 +682,10 @@ async function sendRequest(action, data = {}) {
         console.log('收到响应:', result);
         
         if (!result.success) {
+            // 特殊处理房间不存在的情况
+            if (result.error && result.error.includes('房间不存在')) {
+                return { success: false, error: '房间不存在' };
+            }
             throw new Error(result.error || '请求失败');
         }
         
@@ -685,16 +693,18 @@ async function sendRequest(action, data = {}) {
     } catch (error) {
         console.error('请求错误:', error);
         
-        let errorMessage = '错误: ';
+        let errorMessage = '网络错误: ';
         if (error.name === 'AbortError') {
-            errorMessage += '请求超时，请重试';
+            errorMessage += '请求超时';
+        } else if (error.message.includes('Failed to fetch')) {
+            errorMessage += '连接失败，服务器可能正在重启';
         } else {
             errorMessage += error.message;
         }
         
         showMessage(errorMessage);
         updateConnectionStatus(false);
-        throw error;
+         throw error;
     }
 }
     
@@ -709,11 +719,23 @@ async function sendRequest(action, data = {}) {
         }
     }
     
-    // 轮询更新
-    async function pollUpdates() {
-     if (!currentRoomId || !currentPlayerId) return;
+   
     
-     try {
+// 开始轮询
+function startPolling() {
+    stopPolling();
+    pollUpdates(); // 立即执行一次
+    
+    // 降低轮询频率，避免触发 Vercel 限制
+    pollInterval = setInterval(pollUpdates, 8000); // 改为8秒
+}
+
+// 轮询更新
+async function pollUpdates() {
+    if (!currentRoomId || !currentPlayerId) return;
+    
+    try {
+        console.log('发送轮询请求...');
         const result = await sendRequest('get_updates');
         
         if (result.success) {
@@ -724,19 +746,19 @@ async function sendRequest(action, data = {}) {
             }
         } else {
             updateConnectionStatus(false);
+            // 处理房间不存在的情况
+            if (result.error && result.error.includes('房间不存在')) {
+                showMessage('房间已不存在，返回大厅');
+                setTimeout(() => resetGame(), 2000);
+            }
         }
     } catch (error) {
         console.error('轮询错误:', error);
         updateConnectionStatus(false);
+        
+        // 不立即重试，等待下一次轮询
     }
 }
-    
-    // 开始轮询
-    function startPolling() {
-        stopPolling();
-        pollUpdates(); // 立即执行一次
-        pollInterval = setInterval(pollUpdates, 3000); // 每3秒轮询一次
-    }
     
     // 停止轮询
     function stopPolling() {
@@ -1121,6 +1143,16 @@ function updateConnectionStatus(connected) {
     } else {
         connectionStatus.className = 'connection-status disconnected';
         connectionStatus.innerHTML = '<div class="status-dot"></div><span>连接断开 - 点击重试</span>';
+
+ // 添加重试功能
+        connectionStatus.onclick = async function() {
+            showMessage('🔄 重新连接中...');
+            await testConnection();
+            if (currentRoomId && currentPlayerId) {
+                // 如果之前在房间中，尝试重新加入
+                setTimeout(() => pollUpdates(), 1000);
+            }
+        };
     }
 }
     
