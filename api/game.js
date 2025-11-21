@@ -83,23 +83,6 @@ function dealCards(room) {
     });
 }
 
-// 验证出牌
-function validatePlay(cards, lastPlay) {
-    if (!lastPlay) {
-        return { valid: true, type: 'any' };
-    }
-    
-    if (isBomb(cards)) {
-        return { valid: true, type: 'bomb' };
-    }
-    
-    if (cards.length !== lastPlay.cards.length) {
-        return { valid: false, message: "出牌数量必须与上家相同" };
-    }
-    
-    return { valid: true, type: 'normal' };
-}
-
 // 检查是否为炸弹
 function isBomb(cards) {
     if (cards.length === 3 || cards.length === 4) {
@@ -109,24 +92,68 @@ function isBomb(cards) {
     return false;
 }
 
-// 清理过期数据 - 延长存活时间
+// 验证出牌 - 修复版本
+function validatePlay(cards, lastPlay, room) {
+    // 如果没有上一轮出牌，可以出任意牌
+    if (!lastPlay) {
+        return { valid: true, type: 'any' };
+    }
+    
+    // 检查是否为炸弹（可以随时出）
+    if (isBomb(cards)) {
+        return { valid: true, type: 'bomb' };
+    }
+    
+    // 关键修复：如果上一轮所有玩家都Pass了，应该重置出牌限制
+    if (room && room.allPlayersPassed) {
+        return { valid: true, type: 'new_round' };
+    }
+    
+    // 正常情况：出牌数量必须与上家相同
+    if (cards.length !== lastPlay.cards.length) {
+        return { valid: false, message: "出牌数量必须与上家相同" };
+    }
+    
+    return { valid: true, type: 'normal' };
+}
+
+// 清理过期数据 - 优化版本
 function cleanupExpiredData() {
     const now = Date.now();
     console.log(`清理前: ${rooms.size} 个房间, ${clients.size} 个客户端`);
     
-    // 清理过期的客户端（10分钟无活动）
+    // 清理过期的客户端（15分钟无活动）
     for (let [clientId, client] of clients.entries()) {
-        if (now - client.lastSeen > 600000) {
+        if (now - client.lastSeen > 900000) {
             console.log(`清理过期客户端: ${clientId}`);
             clients.delete(clientId);
         }
     }
     
-    // 清理空房间和长时间无活动的房间（30分钟）
+    // 更保守的房间清理策略
     for (let [roomId, room] of rooms.entries()) {
         const roomAge = now - room.createdAt;
-        if (room.players.length === 0 || (roomAge > 1800000 && !room.gameStarted)) {
-            console.log(`清理房间: ${roomId}, 存活时间: ${Math.round(roomAge/1000)}秒, 玩家数: ${room.players.length}`);
+        const lastActivity = room.lastActivity || room.createdAt;
+        const inactiveTime = now - lastActivity;
+        
+        // 空房间：立即清理
+        if (room.players.length === 0) {
+            console.log(`清理空房间: ${roomId}`);
+            rooms.delete(roomId);
+        }
+        // 游戏中的房间：2小时无活动才清理
+        else if (room.gameStarted && inactiveTime > 7200000) {
+            console.log(`清理长时间无活动的游戏房间: ${roomId}, 无活动时间: ${Math.round(inactiveTime/1000)}秒`);
+            rooms.delete(roomId);
+        }
+        // 未开始游戏的房间：1小时无活动清理
+        else if (!room.gameStarted && inactiveTime > 3600000) {
+            console.log(`清理长时间无活动的等待房间: ${roomId}, 无活动时间: ${Math.round(inactiveTime/1000)}秒`);
+            rooms.delete(roomId);
+        }
+        // 房间存在时间超过6小时：强制清理（防止内存泄漏）
+        else if (roomAge > 21600000) {
+            console.log(`清理超时房间: ${roomId}, 存活时间: ${Math.round(roomAge/1000)}秒`);
             rooms.delete(roomId);
         }
     }
@@ -172,6 +199,8 @@ function handleCreateRoom(playerName, clientId) {
         discardPile: [],
         currentPlay: null,
         lastPlay: null,
+        allPlayersPassed: false, // 新增：跟踪是否所有玩家都Pass了
+        lastActivity: Date.now(), // 新增：最后活动时间
         createdAt: Date.now()
     };
     
@@ -239,6 +268,7 @@ function handleJoinRoom(roomId, playerName, clientId) {
     };
     
     room.players.push(player);
+    room.lastActivity = Date.now(); // 更新活动时间
     
     if (clientId) {
         const client = clients.get(clientId);
@@ -397,7 +427,7 @@ function handleStartGame(roomId, playerId) {
     }
 }
 
-// 出牌
+// 出牌 - 增强版本
 function handlePlayCards(roomId, playerId, cards) {
     const room = rooms.get(roomId);
     if (!room) {
@@ -417,8 +447,8 @@ function handlePlayCards(roomId, playerId, cards) {
         return { success: false, error: '玩家不存在' };
     }
     
-    // 验证出牌
-    const validation = validatePlay(cards, room.lastPlay);
+    // 验证出牌 - 传入room参数
+    const validation = validatePlay(cards, room.lastPlay, room);
     if (!validation.valid) {
         return { success: false, error: validation.message };
     }
@@ -432,8 +462,13 @@ function handlePlayCards(roomId, playerId, cards) {
     });
     
     player.cards = player.hand.length;
+    room.lastActivity = Date.now(); // 更新活动时间
 
-    // 新增：记录出牌历史
+    // 重置Pass状态（有玩家出牌了）
+    room.allPlayersPassed = false;
+    room.players.forEach(p => p.passed = false);
+    
+    // 记录出牌历史
     if (!room.recentPlays) {
         room.recentPlays = [];
     }
@@ -446,9 +481,6 @@ function handlePlayCards(roomId, playerId, cards) {
     if (room.recentPlays.length > 4) {
         room.recentPlays = room.recentPlays.slice(-4);
     }
-    
-    // 重置玩家的PASS状态
-    player.passed = false;
     
     // 更新游戏状态
     const play = {
@@ -473,7 +505,8 @@ function handlePlayCards(roomId, playerId, cards) {
             playerName: player.name,
             play: play,
             nextPlayer: room.currentPlayer,
-            newHandCount: player.cards
+            newHandCount: player.cards,
+            allPlayersPassed: room.allPlayersPassed
         });
     });
     
@@ -485,7 +518,7 @@ function handlePlayCards(roomId, playerId, cards) {
     return { success: true, type: 'cards_played' };
 }
 
-// 不出牌
+// 不出牌 - 增强版本
 function handlePassTurn(roomId, playerId) {
     const room = rooms.get(roomId);
     if (!room) {
@@ -502,6 +535,20 @@ function handlePassTurn(roomId, playerId) {
     
     const player = room.players.find(p => p.id === playerId);
     player.passed = true;
+    room.lastActivity = Date.now(); // 更新活动时间
+    
+    // 检查是否所有玩家都Pass了（除了当前出牌的玩家）
+    const activePlayers = room.players.filter(p => !p.passed);
+    if (activePlayers.length <= 1) {
+        // 所有玩家都Pass了，重置出牌限制
+        room.allPlayersPassed = true;
+        room.lastPlay = null; // 清空上一轮出牌记录
+        
+        // 重置所有玩家的Pass状态
+        room.players.forEach(p => p.passed = false);
+        
+        console.log('一轮结束，重置出牌限制');
+    }
     
     // 切换到下一个玩家
     const currentIndex = room.players.findIndex(p => p.id === playerId);
@@ -514,14 +561,15 @@ function handlePassTurn(roomId, playerId) {
             type: 'turn_passed',
             playerId: playerId,
             playerName: player.name,
-            nextPlayer: room.currentPlayer
+            nextPlayer: room.currentPlayer,
+            allPlayersPassed: room.allPlayersPassed // 通知客户端是否重置了出牌限制
         });
     });
     
     return { success: true, type: 'turn_passed' };
 }
 
-// 获取更新
+// 获取更新 - 增强版本
 function handleGetUpdates(roomId, playerId, clientId) {
     if (!roomId || !playerId) {
         return { 
@@ -534,13 +582,28 @@ function handleGetUpdates(roomId, playerId, clientId) {
     
     const room = rooms.get(roomId);
     if (!room) {
-        return { success: false, error: '房间不存在' };
+        console.log(`房间不存在: ${roomId}, 可用房间: ${Array.from(rooms.keys())}`);
+        return { 
+            success: false, 
+            error: '房间不存在',
+            debug: {
+                requestedRoom: roomId,
+                availableRooms: Array.from(rooms.keys())
+            }
+        };
     }
     
     const player = room.players.find(p => p.id === playerId);
     if (!player) {
-        return { success: false, error: '玩家不存在' };
+        return { 
+            success: false, 
+            error: '玩家不存在',
+            roomState: null
+        };
     }
+    
+    // 更新房间活动时间，防止被清理
+    room.lastActivity = Date.now();
     
     const messages = player.pendingMessages || [];
     player.pendingMessages = [];
@@ -568,7 +631,8 @@ function handleGetUpdates(roomId, playerId, clientId) {
             gameStarted: room.gameStarted,
             lastPlay: room.lastPlay,
             drawPileCount: room.drawPile ? room.drawPile.length : 0,
-            recentPlays: room.recentPlays || []
+            recentPlays: room.recentPlays || [],
+            allPlayersPassed: room.allPlayersPassed || false // 新增状态
         }
     };
 }
@@ -597,14 +661,24 @@ function endGame(room, winner) {
     room.currentPlayer = null;
     room.currentPlay = null;
     room.lastPlay = null;
+    room.allPlayersPassed = false;
 }
 
 // 主处理函数
 module.exports = async (req, res) => {
+    const startTime = Date.now();
     console.log('=== 收到请求 ===');
     console.log('方法:', req.method);
     console.log('URL:', req.url);
     console.log('路径:', req.url.split('?')[0]);
+    
+    // 设置响应超时
+    res.setTimeout(9000, () => {
+        if (!res.headersSent) {
+            console.log('请求超时:', req.url);
+            res.status(503).json({ error: '请求超时' });
+        }
+    });
     
     // 设置 CORS 头
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -796,6 +870,10 @@ module.exports = async (req, res) => {
             if (Math.random() < 0.1) {
                 cleanupExpiredData();
             }
+            
+            // 记录执行时间
+            const executionTime = Date.now() - startTime;
+            console.log(`请求处理完成: ${executionTime}ms`);
             
             res.json(result);
             return;
