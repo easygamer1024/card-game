@@ -587,13 +587,15 @@
     let pollInterval = null;
     let lastMyTurnMessage = 0;
     
+   // 生成客户端ID
+function generateClientId() {
+    return 'client_' + Math.random().toString(36).substr(2, 9);
+}
+
+// 初始化
+function initialize() {
     // 生成客户端ID
-    function generateClientId() {
-        return 'client_' + Math.random().toString(36).substr(2, 9);
-    }
-    // 初始化
-   function initialize() {
-       initializeClient();
+    clientId = generateClientId();
      
     // 绑定事件监听器
     document.getElementById('createRoomBtn').addEventListener('click', createRoom);
